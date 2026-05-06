@@ -44,18 +44,16 @@ type FormalityLabel =
 type ThermalBand = "very_cold" | "cold" | "cool" | "mild" | "warm" | "hot";
 ```
 
-### 1.5 dimension
+### 1.5 check_group
 ```typescript
-type Dimension =
-  | "formality_match"
-  | "formality_consistency"
-  | "thermal_fit"
-  | "precipitation_readiness"
-  | "color_contrast"
-  | "tone_balance"
-  | "dresscode_alignment"
-  | "category_completeness";
+type CheckGroup =
+  | "dresscode"      // Group A (드레스코드 충족)
+  | "consistency"    // Group B (의류 간 일관성)
+  | "color"          // Group C (색상)
+  | "environment"    // Group D (날씨/환경 적합성)
+  | "confidence";    // Group E (Vision/Context 신뢰도 메타)
 ```
+> 차원별 0~100 점수는 폐기되었다. 본 시스템은 binary check 17개 + 그룹별 pass rate를 사용한다.
 
 ### 1.6 action_type
 ```typescript
@@ -221,32 +219,45 @@ type DressCodeTier =
 
 ## 4. Recommendation Agent 출력 (RecommendationResponse)
 
+> 본 응답은 **이분법 체크리스트** 기반이다. 차원별 0~100 점수는 사용하지 않는다.
+> 상세 정의는 `04-agent-recommendation-spec.md` 참조.
+
 ```json
 {
   "type": "object",
-  "required": ["session_id", "scores", "weak_dimensions", "suggestions", "explanation"],
+  "required": ["session_id", "score", "checks", "blockers_failed", "suggestions", "explanation"],
   "properties": {
     "session_id": {"type": "string"},
-    "scores": {
+    "score": {
       "type": "object",
-      "required": ["overall", "dimensions", "weights"],
+      "required": ["overall", "method", "group_scores", "blocker_failed"],
       "properties": {
-        "overall": {"type": "number", "minimum": 0, "maximum": 100},
-        "dimensions": {
+        "overall": {"type": "integer", "minimum": 0, "maximum": 100},
+        "method": {"enum": ["group_weighted_with_blocker_cap"]},
+        "group_scores": {
           "type": "object",
           "patternProperties": {
-            "^(formality_match|formality_consistency|thermal_fit|precipitation_readiness|color_contrast|tone_balance|dresscode_alignment|category_completeness)$": {
-              "type": "number", "minimum": 0, "maximum": 100
+            "^(dresscode|consistency|color|environment|confidence)$": {
+              "type": "number", "minimum": 0, "maximum": 1
             }
           }
         },
-        "weights": {
-          "type": "object",
-          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        "blocker_failed": {"type": "boolean"},
+        "cap_applied": {
+          "type": ["string", "null"],
+          "enum": ["blocker_cap_50", null]
         }
       }
     },
-    "weak_dimensions": {"type": "array", "items": {"type": "string"}},
+    "checks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/Check"}
+    },
+    "blockers_failed": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "실패한 blocker 체크의 ID 목록 (예: ['A4', 'A5'])"
+    },
     "suggestions": {
       "type": "array",
       "maxItems": 3,
@@ -255,22 +266,62 @@ type DressCodeTier =
     "explanation": {"type": "string", "maxLength": 400}
   },
   "$defs": {
+    "Check": {
+      "type": "object",
+      "required": ["id", "group", "label", "result", "applicable", "is_blocker", "evidence_facts"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-E][0-9]+$",
+          "description": "체크 ID (A1~E2 등)"
+        },
+        "group": {
+          "enum": ["dresscode", "consistency", "color", "environment", "confidence"]
+        },
+        "label": {"type": "string", "description": "사용자 표시용 한글 라벨"},
+        "result": {"enum": ["pass", "fail", "not_applicable"]},
+        "applicable": {"type": "boolean"},
+        "is_blocker": {"type": "boolean"},
+        "evidence_facts": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "결정적 사실 목록 (숫자/카테고리 인용). LLM은 이 안의 사실만 인용 가능."
+        }
+      }
+    },
     "Suggestion": {
       "type": "object",
-      "required": ["id", "target_dimension", "action", "rationale_facts", "expected_overall_delta"],
+      "required": ["id", "fixes_check_ids", "action", "rationale_facts", "expected_overall_delta", "removes_blocker"],
       "properties": {
         "id": {"type": "string"},
-        "target_dimension": {"type": "string"},
-        "action": {"enum": ["swap", "add", "remove", "recolor"]},
-        "target_slot": {"enum": ["top", "bottom", "outer", "shoes"]},
-        "from": {"type": "string"},
-        "to": {"type": "string"},
+        "fixes_check_ids": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1,
+          "description": "이 제안이 통과시킬 failed check ID 목록"
+        },
+        "action": {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {"enum": ["swap", "add", "remove", "recolor"]},
+            "target_slot": {"enum": ["top", "bottom", "outer", "shoes"]},
+            "from": {"type": "string"},
+            "to": {"type": "string"}
+          }
+        },
         "rationale_facts": {
           "type": "array",
           "items": {"type": "string"},
           "minItems": 1
         },
-        "expected_overall_delta": {"type": "number"}
+        "expected_overall_delta": {"type": "integer"},
+        "removes_blocker": {"type": "boolean"},
+        "user_facing_text": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "LLM Narrator의 한국어 자연어 출력. 금지 단어 필터 통과 보장."
+        }
       }
     }
   }
@@ -328,14 +379,29 @@ type DressCodeTier =
 ```json
 {
   "session_id": "string",
-  "original_overall": 71.4,
-  "simulated_overall": 78.9,
-  "delta": 7.5,
+  "original_overall": 67,
+  "simulated_overall": 85,
+  "delta": 18,
   "applied": [
-    {"id": "sg_1", "individual_delta": 5.5},
-    {"id": "sg_3", "individual_delta": 2.0}
+    {"id": "sg_1", "individual_delta": 18, "removes_blocker": true}
   ],
-  "simulated_dimensions": { ... }
+  "simulated_score": {
+    "overall": 85,
+    "method": "group_weighted_with_blocker_cap",
+    "group_scores": {
+      "dresscode": 1.00,
+      "consistency": 1.00,
+      "color": 0.66,
+      "environment": 0.66,
+      "confidence": 1.00
+    },
+    "blocker_failed": false,
+    "cap_applied": null
+  },
+  "checks_flipped": {
+    "to_pass": ["A3", "A5"],
+    "to_fail": []
+  }
 }
 ```
 

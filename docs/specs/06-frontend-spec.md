@@ -59,16 +59,23 @@
 
 ### 4.3 `/result` — 결과
 - 상단: **종합 점수 게이지** (0~100, 색상 단계: 30/60/80)
-- 차원 점수: 8개 차원의 막대 차트 (정렬: weak → strong)
+  - `score.cap_applied == "blocker_cap_50"` 일 때 게이지 옆에 빨간 "핵심 미스" 배지
+- **Blocker 알림 영역** (있을 때만): 실패한 blocker 체크의 라벨을 빨간 카드로 노출
+- **체크리스트 영역** (차원 막대 차트 대체):
+  - 5개 그룹(드레스코드 / 일관성 / 색상 / 환경 / 신뢰도)별 헤더 + pass rate (예: "드레스코드 4/6")
+  - 그룹 안에 체크 항목 리스트:
+    - ✓ pass: 회색 텍스트
+    - ✗ fail: 강조 텍스트 + `evidence_facts` 펼치기
+    - — not_applicable: 흐림 + "해당 없음"
+  - blocker check는 ✗일 때 빨간 배지
 - **Dress Code Tier 배지** (`context.dress_code.tier` 기준):
-  - `tier1` → 배지 없음 (디폴트)
-  - `tier2_live` → 배지 "실시간 외부 자료 기반 추정" + ⓘ 클릭 시 출처 패널 펼침
-    - 출처 패널: `evidence_quotes` 의 url + 짧은 인용문 + fetched_at
-    - "출처가 부족하면 결과가 부정확할 수 있습니다" 디스클레이머
-  - `fallback_general` → 배지 "일반 가이드 적용" + 사용자 안내
-- 제안 카드 리스트 (1~3개):
-  - 카드 구조: 행동 요약 / 근거 사실(facts) / 예상 점수 증가량
-  - "이 제안 적용 시뮬레이션" 토글 → 종합 점수 게이지가 시뮬레이션 값으로 일시 변경
+  - `tier1` → 배지 없음
+  - `tier2_live` → "실시간 외부 자료 기반 추정" + ⓘ 클릭 시 `evidence_quotes` 출처 패널
+  - `fallback_general` → "일반 가이드 적용"
+- **제안 카드 리스트 (1~3개)**:
+  - 카드 구조: action 요약 / `fixes_check_ids` 의 체크 라벨들 / `rationale_facts` / `expected_overall_delta`
+  - `removes_blocker == true` 인 카드는 상단 고정 + 강조 표시
+  - "이 제안 적용 시뮬레이션" 토글 → 종합 게이지 + 해당 체크들이 ✓로 시각적 전환
 - 재촬영 / 새 분석 버튼
 
 ## 5. 데이터 흐름
@@ -104,17 +111,19 @@ POST /v1/sessions/{id}/simulate { applied_suggestion_ids: [...] }
 - 사용자 외형/체형 언급
 - 서버에서 안 준 추가 추론
 
-### 6.3 차원 한글 매핑
-| 서버 키 | 표시 라벨 |
+### 6.3 그룹 한글 매핑
+| 서버 키 (`check.group`) | 표시 라벨 |
 |---|---|
-| formality_match | 포멀니스 일치도 |
-| formality_consistency | 포멀니스 일관성 |
-| thermal_fit | 온도 적합도 |
-| precipitation_readiness | 강수 대비도 |
-| color_contrast | 색 대비 |
-| tone_balance | 톤 균형 |
-| dresscode_alignment | 드레스코드 정합도 |
-| category_completeness | 의류 구성 완성도 |
+| dresscode | 드레스코드 충족 |
+| consistency | 의류 간 일관성 |
+| color | 색상 |
+| environment | 날씨/환경 적합성 |
+| confidence | 분석 신뢰도 |
+
+### 6.4 체크 라벨
+- 각 체크의 `label` 필드는 서버에서 한글로 직접 제공 (예: "신발 카테고리가 기대 범위에 포함")
+- Frontend는 별도 i18n 매핑 없이 `label` 을 그대로 표시한다.
+- 단, ID(A1~E2)는 디버그 모드에서만 노출.
 
 ## 7. 컴포넌트 구조
 

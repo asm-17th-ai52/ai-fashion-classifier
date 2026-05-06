@@ -76,18 +76,21 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 
 ### 3.4 PR 사이즈
 - 1 PR 당 ≤ 400 LOC
-- 영역 횡단 PR 금지 (예: Vision Agent 코드 + Frontend 라벨 동시 변경 금지). 단, 차원 추가는 예외 (3.5 참조).
+- 영역 횡단 PR 금지 (예: Vision Agent 코드 + Frontend 라벨 동시 변경 금지). 단, 체크 항목 추가는 예외 (3.5 참조).
 
-### 3.5 차원 추가/제거 (Cross-cutting)
-점수 차원 추가/제거 시 단일 PR에 다음이 모두 포함되어야 한다:
-- `04-agent-recommendation-spec.md` 업데이트
-- `07-data-contracts.md` 의 `Dimension` enum 업데이트
-- `backend/app/scoring/` 함수 추가/제거
-- 가중치 테이블 업데이트 (`weights.yaml`)
-- `frontend/lib/i18n.ts` 라벨 매핑 업데이트
-- 테스트 추가
+### 3.5 체크 항목 추가/제거/이동 (Cross-cutting)
+체크리스트 변경 시 단일 PR에 다음이 모두 포함되어야 한다:
+- `04-agent-recommendation-spec.md` 의 체크 표 업데이트
+- `backend/app/scoring/checks/` 에 새 Check 클래스 추가/제거
+- Check Registry 업데이트
+- blocker 여부 결정 (해당 시)
+- `07-data-contracts.md` 의 `CheckGroup` enum (그룹 추가 시에만)
+- `RecommendationResponse` schema 영향 검토 (체크 단순 추가는 schema 변경 없음)
+- 새 체크의 `label` (한글) — 서버에서 직접 제공
+- 단위 테스트 ≥ 4 케이스 (pass / fail / N/A / 경계값)
+- 골든 시나리오 5개 회귀 검증
 
-리뷰어: rec-owner + frontend-owner + backend-owner.
+리뷰어: rec-owner + backend-owner. (Frontend는 `label`을 그대로 표시하므로 코드 변경 보통 불필요.)
 
 ## 4. 정량성/주관성 가드레일 (전 역할 공통)
 
@@ -175,10 +178,12 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 
 다음을 모두 만족해야 프로젝트 완료로 본다.
 
-- [ ] 8개 차원 점수 함수 모두 단위 테스트 통과
+- [ ] 17개 binary 체크 모두 단위 테스트 통과 (pass/fail/N/A 케이스)
+- [ ] 그룹별 pass rate + blocker cap 산출 정합성 테스트 통과
+- [ ] 시뮬레이션 정합성 ≥ 99% (적용 후 expected_delta ±1)
 - [ ] 5개 E2E 시나리오 통과
 - [ ] Schema Pass Rate ≥ 98% (자동 측정)
-- [ ] 동일 입력 5회 호출 시 종합 점수 표준편차 ≤ 2.0
+- [ ] 동일 입력 5회 호출 시 종합 점수 + 17개 체크 결과 100% 동일
 - [ ] 금지 단어 회귀 테스트 통과 (위반 0건)
 - [ ] Latency P95 ≤ 8s
 - [ ] 발표 데모 1회 무사고 시연
