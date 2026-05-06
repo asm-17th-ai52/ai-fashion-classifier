@@ -269,41 +269,143 @@ output: violation 또는 None
 | Step 4 재추출 후에도 위반 | 위반된 슬롯의 garment를 결과에서 제거 + warnings |
 | Total latency > 7s | 현재까지의 부분 결과 반환 + `timeout` warning |
 
-## 11. 외부 인터페이스
+## 11. LangGraph Sub-graph 구조
+
+본 Agent는 **LangGraph StateGraph**로 구현한다. Super-graph(Backend)는 이 sub-graph를 단일 노드처럼 호출한다.
+
+### 11.1 VisionState
 
 ```python
-# backend/app/agents/vision/agent.py
-async def analyze_outfit(
-    session_id: str,
-    image_bytes: bytes,
-) -> VisionResponse:
-    state = VisionAgentState(session_id, image_bytes)
+from pydantic import BaseModel
 
-    # Step 0
-    quality = await tools.validate_image(state.image)
-    if not quality.person_detected:
-        raise VisionError(reason="person_not_detected")
-    state.bboxes = await tools.pose_keypoints(state.image)
+class VisionState(BaseModel):
+    session_id: str
+    image: bytes
 
-    # Step 1: 1차 추출
-    state.garments = await tools.vlm_extract(state.image, scope="all")
-    state.steps_taken = 1
+    # Step 0 산출물
+    quality: Optional[ImageQuality] = None
+    slot_bboxes: dict = {}
 
-    # Step 2~4: Verify-and-Refine 루프
-    for _ in range(2):  # 최대 2번 추가 step
-        violations = await run_verifiers(state)
-        state.garments = overwrite_colors_from_opencv(state)  # 색상 항상 덮어쓰기
-        if not violations:
-            break
-        plan = await tools.critic_llm(state.garments, violations)
-        if plan.give_up:
-            state.warnings.append("critic_gave_up")
-            break
-        state.garments = await tools.vlm_extract_targeted(state, plan)
-        state.steps_taken += 1
+    # Step 1+ 산출물
+    garments: list[Garment] = []
+    violations: list[Violation] = []
 
-    return state.to_response()
+    # Critic 결과
+    reextract_plan: Optional[ReextractPlan] = None
+    give_up: bool = False
+
+    # 메타
+    steps_taken: int = 0
+    vlm_calls: int = 0
+    tool_call_log: list[dict] = []
+    warnings: list[str] = []
 ```
+
+### 11.2 그래프 정의
+
+```python
+from langgraph.graph import StateGraph, END
+
+def build_vision_graph():
+    g = StateGraph(VisionState)
+
+    # 결정적 도구 노드
+    g.add_node("validate_image", node_validate_image)
+    g.add_node("pose_keypoints", node_pose_keypoints)
+    g.add_node("face_blur_check", node_face_blur_check)
+
+    # LLM 노드
+    g.add_node("vlm_extract_all", node_vlm_extract_all)
+    g.add_node("vlm_extract_targeted", node_vlm_extract_targeted)
+    g.add_node("critic_llm", node_critic_llm)
+
+    # Verifier 노드 (병렬 실행 후 합류)
+    g.add_node("run_verifiers", node_run_verifiers)
+    g.add_node("overwrite_colors", node_overwrite_colors)
+
+    g.set_entry_point("validate_image")
+
+    # Step 0 직선
+    g.add_edge("validate_image", "pose_keypoints")
+    g.add_edge("pose_keypoints", "face_blur_check")
+    g.add_edge("face_blur_check", "vlm_extract_all")
+
+    # Step 1 → Verify (색상 항상 덮어쓰기)
+    g.add_edge("vlm_extract_all", "overwrite_colors")
+    g.add_edge("overwrite_colors", "run_verifiers")
+
+    # 분기: violations 비어있으면 END, 아니면 critic
+    g.add_conditional_edges(
+        "run_verifiers",
+        decide_after_verify,   # 함수: violations + steps_taken 확인
+        {
+            "done": END,
+            "critic": "critic_llm",
+            "exhausted": END,   # steps_taken ≥ 3
+        }
+    )
+
+    # Critic 분기: give_up이면 END, 아니면 targeted re-extract
+    g.add_conditional_edges(
+        "critic_llm",
+        decide_after_critic,
+        {
+            "reextract": "vlm_extract_targeted",
+            "give_up": END,
+        }
+    )
+
+    # Re-extract 후 다시 verify
+    g.add_edge("vlm_extract_targeted", "overwrite_colors")
+
+    return g.compile()
+
+vision_subgraph = build_vision_graph()
+```
+
+### 11.3 분기 함수
+
+```python
+def decide_after_verify(state: VisionState) -> str:
+    if not state.violations:
+        return "done"
+    if state.steps_taken >= 3:
+        state.warnings.append("max_steps_reached")
+        return "exhausted"
+    return "critic"
+
+def decide_after_critic(state: VisionState) -> str:
+    if state.reextract_plan and state.reextract_plan.give_up:
+        state.warnings.append("critic_gave_up")
+        return "give_up"
+    return "reextract"
+```
+
+### 11.4 노드 책임
+
+각 노드는 **단일 책임**: 한 가지 도구 호출 또는 한 가지 LLM 호출. State를 받아 부분 업데이트(dict)를 반환.
+
+| 노드 | 책임 | 결정성 |
+|---|---|---|
+| `validate_image` | 사람 검출, 해상도 | ✓ |
+| `pose_keypoints` | 슬롯 ROI 산출 | ✓ |
+| `face_blur_check` | 블러 적용 검증 | ✓ |
+| `vlm_extract_all` | 1차 의류 속성 추출 (color 제외) | LLM, t=0 |
+| `overwrite_colors` | OpenCV로 RGB 측정해 garment 덮어쓰기 | ✓ |
+| `run_verifiers` | schema/vocab/duplicate/required 검증 일괄 | ✓ |
+| `critic_llm` | 재추출 대상 결정 | LLM, t=0 |
+| `vlm_extract_targeted` | 특정 슬롯만 재추출 | LLM, t=0 |
+
+### 11.5 Super-graph 노출
+
+```python
+# backend/app/agents/vision/__init__.py
+from .graph import vision_subgraph
+
+__all__ = ["vision_subgraph"]
+```
+
+Backend는 `vision_subgraph` 를 import해 super-graph의 노드로 추가한다 (`05-backend-spec.md §5.2`).
 
 ## 12. 테스트 전략
 

@@ -314,24 +314,156 @@ Tier-2 응답은 항상 `evidence_quotes` 를 포함하므로, 동일 입력에 
 
 `scoring/thermal.py` 의 룩업 테이블로 고정.
 
-## 11. 외부 인터페이스
+## 11. LangGraph Sub-graph 구조
+
+본 Agent는 **두 개의 sub-graph (weather + dresscode)** 를 합쳐 단일 sub-graph로 export한다. 내부에서 weather와 dresscode가 병렬 실행되며, dresscode는 Tier-1/Tier-2 분기 + Tier-2의 ReAct 루프를 가진다.
+
+### 11.1 ContextState
 
 ```python
-async def resolve_context(req: ContextRequest) -> ContextResponse:
-    weather_task = asyncio.create_task(fetch_weather(req.city_code, req.event_datetime))
-    dresscode_task = asyncio.create_task(resolve_dresscode(req))
-    weather, dresscode = await asyncio.gather(weather_task, dresscode_task)
-    return pack_context(req, weather, dresscode)
+class ContextState(BaseModel):
+    # 입력
+    request: ContextRequest
 
-async def resolve_dresscode(req: ContextRequest) -> DressCode:
-    # Tier-1
-    tier1 = await static_rag_retrieve(req.event_type)
-    if tier1.score >= 0.6 and not req.event_type_is_custom:
-        return tier1.to_dresscode(tier="tier1")
-    # Tier-2
-    if not req.allow_live_research or budget_exhausted():
-        return general_fallback(reason="tier2_disabled_or_budget")
-    return await live_research_agent.run(req)
+    # Weather lane
+    weather: Optional[WeatherInfo] = None
+    weather_available: bool = False
+
+    # Dresscode lane
+    tier1_result: Optional[DressCode] = None
+    tier1_score: float = 0.0
+
+    # Tier-2 ReAct 상태
+    tier2_active: bool = False
+    react_step: int = 0
+    search_queries_used: list[str] = []
+    fetched_pages: list[FetchedPage] = []
+    extracted_facts_per_source: list[ExtractedFacts] = []
+    tier2_consensus: Optional[DressCode] = None
+    tier2_meta: dict = {}
+
+    # 최종 결과
+    dress_code: Optional[DressCode] = None
+    thermal_band: Optional[str] = None
+
+    warnings: list[str] = []
+```
+
+### 11.2 그래프 정의
+
+```python
+from langgraph.graph import StateGraph, END
+
+def build_context_graph():
+    g = StateGraph(ContextState)
+
+    # Weather lane (단일 노드, 병렬용)
+    g.add_node("fetch_weather", node_fetch_weather)
+
+    # Dresscode lane
+    g.add_node("tier1_retrieve", node_tier1_retrieve)
+    g.add_node("decide_tier", node_decide_tier)             # 결정적 분기 헬퍼
+
+    # Tier-2 ReAct 루프 노드들
+    g.add_node("tier2_plan_query", node_tier2_plan_query)   # LLM
+    g.add_node("tier2_web_search", node_tier2_web_search)   # 도구
+    g.add_node("tier2_fetch_pages", node_tier2_fetch_pages) # 도구
+    g.add_node("tier2_extract_facts", node_tier2_extract_facts)  # LLM
+    g.add_node("tier2_consensus", node_tier2_consensus)     # 결정적
+    g.add_node("tier2_promotion_enqueue", node_tier2_promotion_enqueue)
+
+    # 최종 합류
+    g.add_node("compute_thermal_band", node_compute_thermal_band)
+    g.add_node("pack_context", node_pack_context)
+
+    g.set_entry_point("__start__")  # langgraph가 fan-out
+
+    # 병렬 fan-out
+    g.add_edge("__start__", "fetch_weather")
+    g.add_edge("__start__", "tier1_retrieve")
+
+    # Tier 결정 (Tier-1 score + custom 플래그 + budget)
+    g.add_edge("tier1_retrieve", "decide_tier")
+    g.add_conditional_edges(
+        "decide_tier",
+        decide_dresscode_tier,
+        {
+            "use_tier1": "compute_thermal_band",
+            "fallback_general": "compute_thermal_band",
+            "go_tier2": "tier2_plan_query",
+        }
+    )
+
+    # Tier-2 ReAct 루프
+    g.add_edge("tier2_plan_query", "tier2_web_search")
+    g.add_edge("tier2_web_search", "tier2_fetch_pages")
+    g.add_edge("tier2_fetch_pages", "tier2_extract_facts")
+    g.add_conditional_edges(
+        "tier2_extract_facts",
+        decide_tier2_continue,
+        {
+            "more_search": "tier2_plan_query",   # step < 5 이고 소스 < 2
+            "consensus": "tier2_consensus",
+            "abort": "compute_thermal_band",     # budget/timeout
+        }
+    )
+    g.add_edge("tier2_consensus", "tier2_promotion_enqueue")
+    g.add_edge("tier2_promotion_enqueue", "compute_thermal_band")
+
+    # weather와 dresscode 합류 (compute_thermal_band가 fan-in 지점)
+    g.add_edge("fetch_weather", "compute_thermal_band")
+
+    g.add_edge("compute_thermal_band", "pack_context")
+    g.add_edge("pack_context", END)
+
+    return g.compile()
+
+context_subgraph = build_context_graph()
+```
+
+### 11.3 분기 함수
+
+```python
+def decide_dresscode_tier(state: ContextState) -> str:
+    if state.tier1_score >= 0.6 and not state.request.event_type_is_custom:
+        return "use_tier1"
+    if not state.request.allow_live_research or budget_exhausted():
+        return "fallback_general"
+    return "go_tier2"
+
+def decide_tier2_continue(state: ContextState) -> str:
+    n_sources = len([e for e in state.extracted_facts_per_source
+                     if e.extraction_confidence >= 0.5])
+    if state.react_step >= 5 or latency_exceeded(state):
+        return "abort"
+    if n_sources >= 2:
+        return "consensus"
+    return "more_search"
+```
+
+### 11.4 노드 책임
+
+| 노드 | 종류 | 책임 |
+|---|---|---|
+| `fetch_weather` | 도구 (HTTP) | Weather API 호출 + 캐시 |
+| `tier1_retrieve` | 도구 (FAISS) | Static RAG 검색 |
+| `decide_tier` | 결정적 헬퍼 | Tier 분기 신호 산출 |
+| `tier2_plan_query` | LLM | 다음 검색 쿼리 1개 생성 (템플릿 강제) |
+| `tier2_web_search` | 도구 | 검색 API 호출, 화이트리스트 필터 |
+| `tier2_fetch_pages` | 도구 | URL fetch (robots.txt 존중, 50KB cap) |
+| `tier2_extract_facts` | LLM | 본문 → 정량 schema 강제 추출 |
+| `tier2_consensus` | 결정적 | 다중 소스 합의 룰 적용 |
+| `tier2_promotion_enqueue` | 결정적 | 승격 큐(JSONL)에 비동기 기록 |
+| `compute_thermal_band` | 결정적 | 룩업 테이블 |
+| `pack_context` | 결정적 | ContextResponse 패키징 |
+
+### 11.5 Super-graph 노출
+
+```python
+# backend/app/agents/context/__init__.py
+from .graph import context_subgraph
+
+__all__ = ["context_subgraph"]
 ```
 
 ## 12. 테스트 전략

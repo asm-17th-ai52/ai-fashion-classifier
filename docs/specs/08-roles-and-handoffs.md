@@ -124,11 +124,21 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 
 | 주차 | Vision | Context | Recommendation | Backend | Frontend |
 |---|---|---|---|---|---|
-| **1주** | VLM 호출 + schema + 골든 5장 | Weather API + thermal_band | 점수 함수 6개 + 테이블 | FastAPI 스캐폴드 + 전처리 | 라우팅 + Upload UI |
-| **2주** | 어휘 검증 + 재시도 + 골든 20장 | Dress code 9개 RAG | 가중치 + action + 시뮬레이터 | 오케스트레이션 + 캐시 | Result UI + 점수 시각화 |
-| **3주** | 얼굴 블러 + 회귀 테스트 | 결정성 테스트 + 통합 | LLM 자연어화 + 안전 필터 | 시뮬 endpoint + 관측성 + E2E | 시뮬 인터랙션 + 발표 폴리싱 |
+| **1주** | LangGraph sub-graph 골격 + 결정적 도구 노드(validate/pose/blur/dominant_rgb) + 1차 VLM 노드 + 골든 5장 | LangGraph sub-graph 골격 + Weather 노드 + Tier-1 RAG 노드 + thermal_band 룩업 | LangGraph sub-graph 골격 + Group A,B 9개 체크 노드 + 점수 산출 노드 | LangGraph 셋업 + super-graph 골격(stub sub-graph) + FastAPI 스캐폴드 + 전처리 노드 | 라우팅 + Upload UI |
+| **2주** | Verifier 5종 노드 + Critic LLM 노드 + 색상 overwrite + 분기 함수 + 골든 20장 | Tier-2 ReAct 노드들(plan_query / web_search / fetch_pages / extract_facts / consensus) + 도메인 화이트리스트 + 분기 함수 | Group C,D,E 8개 체크 + blocker cap + simulator 노드 + candidates 노드 | super-graph에 실제 sub-graph 연결 + 캐시 + 병렬 fan-out/fan-in 검증 | Result UI + 체크리스트 시각화 |
+| **3주** | 얼굴 블러 통합 + 회귀 테스트 + LangSmith trace 확인 | 결정성 테스트 + 승격 큐 노드 + 통합 + LangSmith trace 확인 | narrate 노드 + safety_filter 분기 + 통합 테스트 | simulate endpoint + 관측성 + E2E + LangGraph checkpoint 활성화 | 시뮬 인터랙션 + Tier-2 출처 패널 + 발표 폴리싱 |
 
 각 주 종료 시점 **인테그레이션 데이**: 금요일 오후, 5인 모두 코드 머지 후 e2e 시나리오 1회 통과.
+
+### 5.1 LangGraph 공통 규칙 (전 Agent + Backend)
+- 각 Agent는 자신의 sub-graph를 `compile()` 결과로 export. 모듈 경로: `app.agents.{name}.{name}_subgraph`
+- State 모델은 Pydantic v2. 변경 시 sub-graph 담당자 + Backend 담당자 동시 리뷰.
+- 노드는 **단일 책임** (한 가지 도구 OR 한 가지 LLM 호출). 노드 함수 시그니처: `(state) -> dict[str, Any]` (부분 업데이트 반환).
+- 분기 함수는 결정적. State의 결정적 필드만 참조.
+- 노드 이름은 snake_case 동사구 (예: `vlm_extract_all`, `tier1_retrieve`).
+- 모든 sub-graph는 단위 테스트로 4개 시나리오 이상 통과해야 한다 (정상 / 분기 일부 / 분기 전부 / 실패).
+- Backend의 super-graph는 Agent sub-graph의 **State schema 변경에 자동으로 영향받지 않는다** — sub-graph가 출력하는 최종 필드(VisionResponse / ContextResponse / RecommendationResponse)만 보면 된다.
+- LangSmith는 환경변수로 활성화 (`LANGCHAIN_TRACING_V2=true`). 운영은 선택, 디버깅 시 권장.
 
 ## 6. 의사결정 로그 (DACI)
 

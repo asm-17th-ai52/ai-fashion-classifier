@@ -27,9 +27,12 @@ Backend는 위 모듈을 **호출**할 뿐, 내부 로직은 담당자별 모듈
 
 - 언어: Python 3.11+
 - 프레임워크: FastAPI (기획서: `Spring Boot / FastAPI` → 본 spec은 FastAPI 채택, 단일 언어로 Agent 모듈과 통합)
+- **오케스트레이션: LangGraph 0.2+** (각 Agent는 sub-graph, Backend는 super-graph)
+- LLM 클라이언트: LangChain core (LangGraph 내부 사용) + 직접 OpenAI SDK 혼용 가능
 - 비동기: `asyncio`, `httpx`
-- 검증: Pydantic v2
+- 검증: Pydantic v2 (LangGraph State와 동일 모델 공유)
 - 이미지 처리: Pillow + OpenCV (얼굴 블러용 MediaPipe)
+- 관측성: LangSmith trace (선택, 환경변수로 활성화)
 - 테스트: pytest, pytest-asyncio
 - 로깅: structlog (JSON 로깅)
 
@@ -86,28 +89,114 @@ is_indoor: bool (default: false)
 ### 4.4 `GET /v1/health`
 - 외부 의존성 헬스체크 (`weather_api`, `openai`, `vector_db`)
 
-## 5. 오케스트레이션 (핵심 로직)
+## 5. 오케스트레이션 (LangGraph Super-graph)
+
+본 Backend는 모든 Agent를 **하나의 LangGraph super-graph로 묶어** 실행한다. 각 Agent의 sub-graph는 담당자가 자체 spec에 따라 구현하여 export하고, Backend는 이를 노드로 받아 흐름만 정의한다.
+
+### 5.1 SessionState
 
 ```python
-async def analyze_session(req: SessionCreateRequest) -> SessionResponse:
-    image_bytes = await preprocess_image(req.image)  # blur, resize, EXIF
-    session_id = mint_session_id()
+from typing import Optional
+from pydantic import BaseModel
 
-    # Phase 1: Vision + Context 병렬
-    vision_task = vision_agent.analyze_outfit(session_id, image_bytes)
-    context_task = context_agent.resolve_context(req.to_context_request())
-    outfit, context = await asyncio.gather(vision_task, context_task)
+class SessionState(BaseModel):
+    # 입력
+    session_id: str
+    image_bytes: bytes
+    request: SessionCreateRequest
 
-    # Phase 2: Recommendation (직렬)
-    recommendation = await recommendation_agent.score_and_suggest(outfit, context)
+    # 전처리 결과
+    preprocessed_image: Optional[bytes] = None
+    preprocess_meta: Optional[dict] = None
 
-    # Phase 3: 캐시 저장
-    await cache.put(session_id, ttl=86400, ...)
+    # Agent sub-graph 산출물 (각 sub-graph가 채움)
+    outfit: Optional[VisionResponse] = None
+    context: Optional[ContextResponse] = None
+    recommendation: Optional[RecommendationResponse] = None
 
-    return SessionResponse(...)
+    # 메타
+    agent_latencies_ms: dict = {}
+    cache_hits: list[str] = []
+    tier2_triggered: bool = False
+    errors: list[dict] = []
 ```
 
-Phase 1 병렬은 latency를 ≈ max(vision, context)로 단축한다.
+### 5.2 Super-graph 정의
+
+```python
+from langgraph.graph import StateGraph, END
+from app.agents.vision import vision_subgraph        # compiled sub-graph
+from app.agents.context import context_subgraph
+from app.agents.recommendation import recommendation_subgraph
+
+def build_super_graph():
+    g = StateGraph(SessionState)
+
+    g.add_node("preprocess", preprocess_node)            # 결정적
+    g.add_node("vision", vision_subgraph)                # Agent sub-graph
+    g.add_node("context", context_subgraph)              # Agent sub-graph
+    g.add_node("recommendation", recommendation_subgraph)# Agent sub-graph
+    g.add_node("pack_response", pack_response_node)      # 결정적
+
+    g.set_entry_point("preprocess")
+
+    # 병렬 fan-out: preprocess 후 vision과 context 동시 실행
+    g.add_edge("preprocess", "vision")
+    g.add_edge("preprocess", "context")
+
+    # join: vision과 context 모두 끝나야 recommendation 진입
+    g.add_edge(["vision", "context"], "recommendation")
+
+    g.add_edge("recommendation", "pack_response")
+    g.add_edge("pack_response", END)
+
+    return g.compile()
+
+SUPER_GRAPH = build_super_graph()
+```
+
+### 5.3 FastAPI 라우터에서의 호출
+
+```python
+@router.post("/v1/sessions")
+async def create_session(req: SessionCreateRequest):
+    initial_state = SessionState(
+        session_id=mint_session_id(),
+        image_bytes=await req.image.read(),
+        request=req,
+    )
+    final_state = await SUPER_GRAPH.ainvoke(
+        initial_state,
+        config={"configurable": {"session_id": initial_state.session_id}},
+    )
+    await cache.put(final_state.session_id, ttl=86400, value=final_state)
+    return final_state.to_response()
+```
+
+### 5.4 Backend가 직접 책임지는 노드
+
+| 노드 | 종류 | 책임 |
+|---|---|---|
+| `preprocess` | 결정적 | EXIF 정규화, 사람 검출, 얼굴 블러, 리사이즈, JPEG 재인코딩 |
+| `pack_response` | 결정적 | SessionState → SessionResponse 변환, agent_latencies 합산, cache 키 산출 |
+
+Agent sub-graph(`vision_subgraph`, `context_subgraph`, `recommendation_subgraph`)의 내부 노드는 **각 Agent 담당자가 자체 spec(02/03/04)에 따라 정의**한다. Backend는 sub-graph의 입출력 schema만 알면 된다.
+
+### 5.5 에러 전파
+
+- 각 sub-graph는 실패 시 `state.errors` 에 항목 추가하고 다음 노드로 진행하거나, fatal 에러는 예외로 전파.
+- super-graph 차원에서 fatal 예외는 FastAPI 에러 핸들러가 HTTP 코드로 변환 (`07-data-contracts.md §5.4`).
+- 부분 실패 (예: weather API 실패)는 errors에 기록하되 그래프는 계속 진행.
+
+### 5.6 LangSmith 통합 (선택)
+
+환경변수로 제어:
+```
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=...
+LANGCHAIN_PROJECT=ai-swm-52
+```
+활성화 시 모든 노드 입출력, latency, token이 자동 기록되며, `session_id` 가 trace ID로 연결된다.
 
 ## 6. 이미지 전처리 파이프라인
 

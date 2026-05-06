@@ -311,31 +311,113 @@ ALLOWED: cite numbers from facts, name actions, mention check IDs.
 - 출력 텍스트에 금지 단어 정규식 매칭 → 위반 시 1회 재시도 후 fallback (룰 기반 템플릿)
 - 숫자가 facts에 없는 값을 인용했는지 검증 (간단한 숫자 매칭)
 
-## 10. 외부 인터페이스
+## 10. LangGraph Sub-graph 구조
+
+본 Agent는 **결정적 노드 4개 + LLM 노드 1개**로 구성된 직선 그래프다. 분기는 "narrator 안전 필터 실패 시 재시도"의 single back-edge 만 존재.
+
+### 10.1 RecommendationState
 
 ```python
-async def score_and_suggest(
-    outfit: VisionResponse,
-    context: ContextResponse,
-) -> RecommendationResponse:
-    # 1. 모든 체크 평가 (결정적)
-    checks = [c.run(outfit, context) for c in REGISTRY]
+class RecommendationState(BaseModel):
+    # 입력
+    outfit: VisionResponse
+    context: ContextResponse
 
-    # 2. 점수 산출 (결정적)
-    score = compute_score_from_checks(checks)
+    # 산출물
+    checks: list[CheckResult] = []
+    score: Optional[Score] = None
+    candidates: list[SuggestionCandidate] = []
+    top3: list[SuggestionCandidate] = []
 
-    # 3. 제안 후보 생성 + 시뮬레이션 (결정적)
-    candidates = generate_candidates(checks, outfit, context)
-    candidates = simulate_and_filter(candidates, outfit, context)
-    top3 = pick_top3(candidates)
+    # Narrator
+    narration: Optional[Narration] = None
+    narrator_retries: int = 0
+    narrator_violations: list[str] = []
 
-    # 4. LLM 자연어화 (LLM)
-    narration = await llm_narrate(score, checks, top3)
-
-    return RecommendationResponse(
-        score=score, checks=checks, suggestions=top3.with_text(narration)
-    )
+    # 최종
+    response: Optional[RecommendationResponse] = None
 ```
+
+### 10.2 그래프 정의
+
+```python
+from langgraph.graph import StateGraph, END
+
+def build_recommendation_graph():
+    g = StateGraph(RecommendationState)
+
+    g.add_node("evaluate_checks", node_evaluate_checks)         # 결정적
+    g.add_node("compute_score", node_compute_score)             # 결정적
+    g.add_node("generate_candidates", node_generate_candidates) # 결정적
+    g.add_node("simulate_and_filter", node_simulate_and_filter) # 결정적
+    g.add_node("narrate", node_narrate)                         # LLM
+    g.add_node("safety_filter", node_safety_filter)             # 결정적
+    g.add_node("pack_response", node_pack_response)             # 결정적
+
+    g.set_entry_point("evaluate_checks")
+    g.add_edge("evaluate_checks", "compute_score")
+    g.add_edge("compute_score", "generate_candidates")
+    g.add_edge("generate_candidates", "simulate_and_filter")
+    g.add_edge("simulate_and_filter", "narrate")
+    g.add_edge("narrate", "safety_filter")
+
+    # 안전 필터 분기: 위반 시 재시도 1회, 그래도 실패면 fallback 템플릿
+    g.add_conditional_edges(
+        "safety_filter",
+        decide_after_safety,
+        {
+            "ok": "pack_response",
+            "retry": "narrate",        # 1회 재시도
+            "fallback": "pack_response",  # rule-template 사용
+        }
+    )
+
+    g.add_edge("pack_response", END)
+    return g.compile()
+
+recommendation_subgraph = build_recommendation_graph()
+```
+
+### 10.3 분기 함수
+
+```python
+def decide_after_safety(state: RecommendationState) -> str:
+    if not state.narrator_violations:
+        return "ok"
+    if state.narrator_retries < 1:
+        state.narrator_retries += 1
+        return "retry"
+    # fallback: 룰 기반 템플릿으로 narration 생성
+    state.narration = rule_template_narration(state.score, state.top3)
+    return "fallback"
+```
+
+### 10.4 노드 책임
+
+| 노드 | 종류 | 책임 |
+|---|---|---|
+| `evaluate_checks` | 결정적 | 17개 Check 클래스 실행 → CheckResult[] |
+| `compute_score` | 결정적 | 그룹별 pass rate + blocker cap → Score |
+| `generate_candidates` | 결정적 | failed check의 fix_template → action 후보 |
+| `simulate_and_filter` | 결정적 | apply_action → 재평가 → delta ≥ +2, 역효과 없음 필터 → top3 |
+| `narrate` | LLM (t=0) | facts/숫자만 인용해 한국어 자연어 생성 |
+| `safety_filter` | 결정적 | 금지 단어 정규식 + 인용 숫자 검증 |
+| `pack_response` | 결정적 | RecommendationResponse 패키징 |
+
+### 10.5 Super-graph 노출
+
+```python
+# backend/app/agents/recommendation/__init__.py
+from .graph import recommendation_subgraph
+
+__all__ = ["recommendation_subgraph"]
+```
+
+### 10.6 시뮬레이션 endpoint와의 공유
+
+`POST /v1/sessions/{id}/simulate` 는 그래프 전체가 아니라 다음 3 노드만 재실행:
+`evaluate_checks` → `compute_score` → `pack_response_simulate`
+LLM 미사용, 결정적, < 100ms.
 
 ## 11. 테스트 전략
 
