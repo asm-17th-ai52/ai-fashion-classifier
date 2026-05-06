@@ -9,7 +9,7 @@
 2. 이미지 업로드 검증, 정규화, 얼굴 자동 블러
 3. 3개 Agent의 오케스트레이션 (병렬/직렬 제어)
 4. 세션 단위 캐싱 (멱등성)
-5. 외부 의존성(Weather API, OpenAI API) 키 관리 + rate limit
+5. 외부 의존성(OpenAI API) 키 관리 + rate limit
 6. 관측성: 로깅, 메트릭, 트레이싱
 
 ## 2. 비-책임
@@ -18,7 +18,7 @@
 |---|---|
 | 의류 속성 추출 | Vision Agent 담당자 |
 | 점수 계산 | Recommendation Agent 담당자 |
-| Weather/RAG 조회 | Context Agent 담당자 |
+| RAG 조회 | Context Agent 담당자 |
 | UI 렌더링 | Frontend 담당자 |
 
 Backend는 위 모듈을 **호출**할 뿐, 내부 로직은 담당자별 모듈에 위임.
@@ -46,8 +46,6 @@ Backend는 위 모듈을 **호출**할 뿐, 내부 로직은 담당자별 모듈
 image: file (jpeg/png, 1B ≤ size ≤ 10MB)
 event_type: string (enum, see Context spec)
 event_datetime: string (ISO 8601)
-city_code: string
-is_indoor: bool (default: false)
 ```
 
 **Response 200:**
@@ -62,7 +60,7 @@ is_indoor: bool (default: false)
     "agent_latencies_ms": {
       "vision": 2400, "context": 800, "recommendation": 2900
     },
-    "cache_hits": ["weather"]
+    "cache_hits": ["dresscode_tier1"]
   }
 }
 ```
@@ -75,7 +73,6 @@ is_indoor: bool (default: false)
 | 422 | 입력 schema 위반 | (필드별 메시지) |
 | 429 | rate limit | "잠시 후 다시 시도해 주세요" |
 | 502 | Vision/Recommendation Agent 실패 | "AI 분석에 실패했습니다. 다시 시도해 주세요" |
-| 503 | Weather API 다운 | (날씨 차원 제외 후 정상 응답으로 처리, 502 아님) |
 
 ### 4.2 `GET /v1/sessions/{session_id}`
 - 캐시된 분석 결과 재조회 (멱등)
@@ -87,7 +84,7 @@ is_indoor: bool (default: false)
 - LLM 미사용 (결정적, < 100ms)
 
 ### 4.4 `GET /v1/health`
-- 외부 의존성 헬스체크 (`weather_api`, `openai`, `vector_db`)
+- 외부 의존성 헬스체크 (`openai`, `vector_db`)
 
 ## 5. 오케스트레이션 (LangGraph Super-graph)
 
@@ -186,7 +183,7 @@ Agent sub-graph(`vision_subgraph`, `context_subgraph`, `recommendation_subgraph`
 
 - 각 sub-graph는 실패 시 `state.errors` 에 항목 추가하고 다음 노드로 진행하거나, fatal 에러는 예외로 전파.
 - super-graph 차원에서 fatal 예외는 FastAPI 에러 핸들러가 HTTP 코드로 변환 (`07-data-contracts.md §5.4`).
-- 부분 실패 (예: weather API 실패)는 errors에 기록하되 그래프는 계속 진행.
+- 부분 실패 (예: Tier-2 timeout)는 errors에 기록하되 그래프는 계속 진행.
 
 ### 5.6 LangSmith 통합 (선택)
 
@@ -215,7 +212,6 @@ LANGCHAIN_PROJECT=ai-swm-52
 | 데이터 | 키 | TTL | 저장소 |
 |---|---|---|---|
 | 세션 결과 (전체) | `session:{id}` | 24h | Redis (또는 SQLite for dev) |
-| Weather API 응답 | `weather:{city}:{hour}` | 1h | Redis |
 | Dress code Tier-1 RAG | `dresscode:tier1:{event_type}` | 영구 (앱 시작 시 로드) | 메모리 |
 | Dress code Tier-2 결과 | `dresscode:tier2:{normalized_event_type}` | 24h | Redis |
 | Web fetch 결과 | `webfetch:{url_hash}` | 24h | Redis (Tier-2 효율화) |
@@ -269,7 +265,7 @@ LANGCHAIN_PROJECT=ai-swm-52
 
 ## 10. 보안
 
-- API 키는 환경변수 (`OPENAI_API_KEY`, `WEATHER_API_KEY`)
+- API 키는 환경변수 (`OPENAI_API_KEY`)
 - CORS: Frontend origin만 허용
 - 업로드 이미지: 24시간 후 자동 삭제 cron
 - 로그에 raw 이미지 base64 저장 금지
@@ -282,7 +278,7 @@ LANGCHAIN_PROJECT=ai-swm-52
 - 에러 매핑 (Agent error → HTTP 코드)
 
 ### 11.2 통합 테스트
-- 골든 이미지 1장 + 모킹된 Weather → 응답 schema 검증
+- 골든 이미지 1장 + 모킹된 Context Agent → 응답 schema 검증
 - session 캐시 hit 검증
 
 ### 11.3 E2E (CI gating)
