@@ -1,39 +1,61 @@
-import sys
-import os
+"""FastAPI entry point for the Backend service.
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+Per docs/specs/05-backend-spec.md. Run with::
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Literal
-from agent import classify, VALID_SITUATIONS
+    uvicorn main:app --reload --port 8000
 
-app = FastAPI(title="AI Fashion Situation Classifier")
+(executed from the ``api/`` directory; the .venv there has all deps.)
+"""
+from __future__ import annotations
 
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
-class ClassifyRequest(BaseModel):
-    image: str  # base64 encoded
-    situation: Literal["interview", "funeral", "presentation"]
-
-
-class ClassifyResponse(BaseModel):
-    result: Literal["YES", "NO"]
-    reason: str
-
-
-@app.post("/classify", response_model=ClassifyResponse)
-async def classify_outfit(request: ClassifyRequest):
-    if request.situation not in VALID_SITUATIONS:
-        raise HTTPException(status_code=400, detail=f"situation must be one of {VALID_SITUATIONS}")
-
-    try:
-        result = classify(request.image, request.situation)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return ClassifyResponse(**result)
+from app.api.errors import (
+    backend_error_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
+from app.api.health import router as health_router
+from app.api.sessions import router as sessions_router
+from app.core.config import settings
+from app.core.errors import BackendError
+from app.core.logging import configure_logging
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+def create_app() -> FastAPI:
+    configure_logging()
+
+    app = FastAPI(
+        title="AI 패션 상황 추천 — Backend",
+        version="0.1.0",
+        description=(
+            "Vision/Context/Recommendation Agent를 LangGraph super-graph로 "
+            "오케스트레이션하는 API Gateway."
+        ),
+    )
+
+    cors_origins = (
+        ["*"] if settings.cors_origins.strip() == "*"
+        else [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(sessions_router)
+    app.include_router(health_router)
+
+    app.add_exception_handler(BackendError, backend_error_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
+
+    return app
+
+
+app = create_app()
