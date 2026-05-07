@@ -6,7 +6,7 @@
 
 ## 1. 책임
 
-1. 17개 binary 체크 항목을 결정적으로 평가 (pass / fail / not_applicable)
+1. 13개 binary 체크 항목을 결정적으로 평가 (pass / fail / not_applicable)
 2. 그룹별 pass rate 산출 → 종합 점수 계산
 3. Critical blocker 위반 시 점수 cap 적용 + 강한 경고
 4. 각 failed check에 대한 1:1 fix action 생성
@@ -46,7 +46,6 @@ class RecommendationRequest(BaseModel):
       "dresscode": 0.50,
       "consistency": 1.00,
       "color": 0.66,
-      "environment": 0.66,
       "confidence": 1.00
     },
     "blocker_failed": false,
@@ -66,7 +65,7 @@ class RecommendationRequest(BaseModel):
       "is_blocker": false
     },
     {
-      "id": "A5",
+      "id": "A4",
       "group": "dresscode",
       "label": "평균 포멀니스가 기대 범위 안에 위치",
       "result": "fail",
@@ -78,11 +77,11 @@ class RecommendationRequest(BaseModel):
       "is_blocker": true
     }
   ],
-  "blockers_failed": ["A5"],
+  "blockers_failed": ["A4"],
   "suggestions": [
     {
       "id": "sg_1",
-      "fixes_check_ids": ["A3", "A5"],
+      "fixes_check_ids": ["A3", "A4"],
       "action": {
         "type": "swap",
         "target_slot": "shoes",
@@ -97,23 +96,22 @@ class RecommendationRequest(BaseModel):
       "removes_blocker": true
     }
   ],
-  "explanation": "면접 기대 포멀니스(70~95) 대비 평균이 58점이라 핵심 미스 1건이 있습니다. 신발만 로퍼로 교체하면 평균 73점으로 올라가 핵심 미스가 해소됩니다."
+  "explanation": "면접 기대 포멀니스(70~95) 대비 평균이 58점으로 핵심 미스(A4) 1건이 있습니다. 신발만 로퍼로 교체하면 평균 73점으로 올라가 핵심 미스가 해소됩니다."
 }
 ```
 
-## 5. 체크 항목 정의 (총 17개, 5 그룹)
+## 5. 체크 항목 정의 (총 13개, 4 그룹)
 
 > **모든 체크는 결정적 함수 (`backend/app/scoring/checks/`)와 1:1 대응**한다.
 
-### Group A: Dresscode 충족 (6 checks)
+### Group A: Dresscode 충족 (5 checks)
 | ID | 라벨 | Pass 조건 | Blocker |
 |---|---|---|---|
 | A1 | top_in_expected_categories | `outfit.top.category ∈ context.dress_code.expected_categories.top` | no |
 | A2 | bottom_in_expected_categories | bottom 카테고리 ∈ expected.bottom | no |
 | A3 | shoes_in_expected_categories | shoes 카테고리 ∈ expected.shoes | no |
-| A4 | outer_present_when_required | thermal_band ∈ {very_cold, cold} → outer 슬롯 존재 (else N/A) | **yes** |
-| A5 | formality_avg_in_expected_range | 평균 포멀니스 ∈ expected_formality_range | **yes** |
-| A6 | no_avoid_tones | 의류 색상 중 avoid_tones 매칭 0개 | no |
+| A4 | formality_avg_in_expected_range | 평균 포멀니스 ∈ expected_formality_range | **yes** |
+| A5 | no_avoid_tones | 의류 색상 중 avoid_tones 매칭 0개 | no |
 
 ### Group B: 일관성 (3 checks)
 | ID | 라벨 | Pass 조건 | Blocker |
@@ -129,38 +127,23 @@ class RecommendationRequest(BaseModel):
 | C2 | not_too_many_strong_colors | HSV 채도 > 0.7인 의류 ≤ 1개 | no |
 | C3 | tone_diversity_acceptable | HSV 명도 표준편차 ∈ [10, 60] | no |
 
-### Group D: 환경 적합성 (3 checks)
+### Group D: 신뢰도 메타 (2 checks)
 | ID | 라벨 | Pass 조건 | Blocker |
 |---|---|---|---|
-| D1 | warmth_matches_thermal_band | `|outfit_warmth - expected_warmth(thermal_band)| ≤ 2` (룩업 테이블) | no |
-| D2 | precipitation_protected_when_needed | precip_prob ≥ 0.3 → outer 존재 AND 소재 ≠ pure cotton (else N/A) | no |
-| D3 | no_overheat_risk | thermal_band=hot일 때 outer 미착용 또는 보온지수 ≤ 2 (else N/A) | no |
-
-### Group E: 신뢰도 메타 (2 checks)
-| ID | 라벨 | Pass 조건 | Blocker |
-|---|---|---|---|
-| E1 | vision_avg_confidence_adequate | `mean(g.confidence for g in garments) ≥ 0.6` | no |
-| E2 | dresscode_resolution_confident | tier == tier1 OR (tier2 AND extraction_confidence ≥ 0.7) | no |
+| D1 | vision_avg_confidence_adequate | `mean(g.confidence for g in garments) ≥ 0.6` | no |
+| D2 | dresscode_resolution_confident | tier == tier1 OR (tier2 AND extraction_confidence ≥ 0.7) | no |
 
 ### 5.1 N/A (not_applicable) 처리
-- A4, D2, D3은 환경 조건에 따라 평가 자체가 무의미할 수 있음 → `applicable: false`
 - N/A 체크는 분모/분자 모두에서 제외 (점수에 영향 없음)
 
-### 5.2 보온지수 / 기대 보온 룩업 (D1)
-의류별 보온지수 (`backend/app/scoring/thermal_index.csv`):
-```
-t_shirt=1, shirt=2, knit=4, hoodie=3,
-jacket=5, blazer=4, coat=7, padding=9,
-shorts=1, pants=3, jeans=3, slacks=3
-```
-thermal_band별 기대 보온:
-```
-very_cold=14, cold=10, cool=7, mild=5, warm=3, hot=1
-```
-
-### 5.3 색상 룩업 (A6, C2, C3)
+### 5.2 색상 룩업 (A5, C2, C3)
 - avoid_tones 매칭은 RGB → 한글 색상 라벨 룩업 후 `context.dress_code.color_guidance.avoid_tones` 와 set intersection.
 - HSV 변환은 OpenCV 표준 (H 0-179, S 0-255, V 0-255)을 [0,1] 정규화.
+
+### 5.3 포멀니스 수치 매핑 (A4)
+```
+casual=20, smart_casual=45, business_casual=65, business_formal=85, formal=95
+```
 
 ## 6. 점수 산출
 
@@ -396,7 +379,7 @@ def decide_after_safety(state: RecommendationState) -> str:
 
 | 노드 | 종류 | 책임 |
 |---|---|---|
-| `evaluate_checks` | 결정적 | 17개 Check 클래스 실행 → CheckResult[] |
+| `evaluate_checks` | 결정적 | 13개 Check 클래스 실행 → CheckResult[] |
 | `compute_score` | 결정적 | 그룹별 pass rate + blocker cap → Score |
 | `generate_candidates` | 결정적 | failed check의 fix_template → action 후보 |
 | `simulate_and_filter` | 결정적 | apply_action → 재평가 → delta ≥ +2, 역효과 없음 필터 → top3 |
@@ -443,14 +426,14 @@ LLM 미사용, 결정적, < 100ms.
 - 위반 0건 (CI gating)
 
 ### 11.6 Agentic 동작
-- step 카운트 측정: check eval(N=17) → score → simulate(N=후보 수) → narrate
+- step 카운트 측정: check eval(N=13) → score → simulate(N=후보 수) → narrate
 - 시뮬레이션 정합성: 적용 후 실제 재계산 점수가 expected_delta와 ±1 이내
 
 ## 12. 성능 목표
 
 | 지표 | 목표 |
 |---|---|
-| 점수 계산 latency (체크 17개 + 점수) | ≤ 30ms |
+| 점수 계산 latency (체크 13개 + 점수) | ≤ 30ms |
 | 시뮬레이션 latency (제안 후보 평균 5개) | ≤ 50ms |
 | LLM Narrator latency P95 | ≤ 2.5s |
 | 시뮬레이션 정합성 | ≥ 99% (delta 오차 ≤ 1점) |
@@ -460,8 +443,8 @@ LLM 미사용, 결정적, < 100ms.
 
 | 주차 | 산출물 |
 |---|---|
-| 1주차 | Check Registry 골격 + Group A,B 9개 체크 + 점수 산출 + 골든 5케이스 |
-| 2주차 | Group C,D,E 8개 체크 + blocker cap + simulator + 제안 생성기 |
+| 1주차 | Check Registry 골격 + Group A,B 8개 체크 + 점수 산출 + 골든 5케이스 |
+| 2주차 | Group C,D 5개 체크 + blocker cap + simulator + 제안 생성기 |
 | 3주차 | LLM Narrator + 안전 필터 + 통합 테스트 + 시나리오 5개 |
 
 ## 14. 다른 역할과의 인터페이스

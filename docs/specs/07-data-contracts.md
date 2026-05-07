@@ -39,28 +39,22 @@ type FormalityLabel =
   | "formal";         // 95
 ```
 
-### 1.4 thermal_band
-```typescript
-type ThermalBand = "very_cold" | "cold" | "cool" | "mild" | "warm" | "hot";
-```
-
-### 1.5 check_group
+### 1.4 check_group
 ```typescript
 type CheckGroup =
   | "dresscode"      // Group A (드레스코드 충족)
   | "consistency"    // Group B (의류 간 일관성)
   | "color"          // Group C (색상)
-  | "environment"    // Group D (날씨/환경 적합성)
-  | "confidence";    // Group E (Vision/Context 신뢰도 메타)
+  | "confidence";    // Group D (Vision/Context 신뢰도 메타)
 ```
-> 차원별 0~100 점수는 폐기되었다. 본 시스템은 binary check 17개 + 그룹별 pass rate를 사용한다.
+> 차원별 0~100 점수는 폐기되었다. 본 시스템은 binary check 13개 + 그룹별 pass rate를 사용한다.
 
-### 1.6 action_type
+### 1.5 action_type
 ```typescript
 type SuggestionAction = "swap" | "add" | "remove" | "recolor";
 ```
 
-### 1.7 dress_code_tier
+### 1.6 dress_code_tier
 ```typescript
 type DressCodeTier =
   | "tier1"             // 사전 구축 RAG 매칭 성공
@@ -135,23 +129,9 @@ type DressCodeTier =
 ```json
 {
   "type": "object",
-  "required": ["session_id", "weather", "dress_code", "thermal_band", "warnings"],
+  "required": ["session_id", "dress_code", "warnings"],
   "properties": {
     "session_id": {"type": "string"},
-    "weather": {
-      "type": "object",
-      "required": ["available"],
-      "properties": {
-        "available": {"type": "boolean"},
-        "temperature_celsius": {"type": "number"},
-        "feels_like_celsius": {"type": "number"},
-        "precipitation_probability": {"type": "number", "minimum": 0, "maximum": 1},
-        "precipitation_intensity_mm_h": {"type": "number", "minimum": 0},
-        "wind_speed_mps": {"type": "number", "minimum": 0},
-        "humidity": {"type": "number", "minimum": 0, "maximum": 1},
-        "is_outdoor_relevant": {"type": "boolean"}
-      }
-    },
     "dress_code": {
       "type": "object",
       "required": ["event_type", "tier", "rag_match_score", "expected_formality_range",
@@ -209,9 +189,6 @@ type DressCodeTier =
         }
       }
     },
-    "thermal_band": {
-      "enum": ["very_cold", "cold", "cool", "mild", "warm", "hot"]
-    },
     "warnings": {"type": "array"}
   }
 }
@@ -237,7 +214,7 @@ type DressCodeTier =
         "group_scores": {
           "type": "object",
           "patternProperties": {
-            "^(dresscode|consistency|color|environment|confidence)$": {
+            "^(dresscode|consistency|color|confidence)$": {
               "type": "number", "minimum": 0, "maximum": 1
             }
           }
@@ -276,7 +253,7 @@ type DressCodeTier =
           "description": "체크 ID (A1~E2 등)"
         },
         "group": {
-          "enum": ["dresscode", "consistency", "color", "environment", "confidence"]
+          "enum": ["dresscode", "consistency", "color", "confidence"]
         },
         "label": {"type": "string", "description": "사용자 표시용 한글 라벨"},
         "result": {"enum": ["pass", "fail", "not_applicable"]},
@@ -339,8 +316,6 @@ type DressCodeTier =
 | event_type | string | yes | StandardEventType 또는 자유 입력 |
 | event_type_is_custom | boolean | no (default false) | true 면 Tier-2 강제. 자유 입력 시 서버가 자동 true 처리 |
 | event_datetime | string (ISO 8601) | yes | |
-| city_code | string | yes | KR-SEOUL 등 |
-| is_indoor | boolean | no (default false) | |
 | allow_live_research | boolean | no (default true) | false 면 Tier-2 비활성, fallback_general 사용 |
 
 **Response 200 — SessionResponse:**
@@ -392,7 +367,6 @@ type DressCodeTier =
       "dresscode": 1.00,
       "consistency": 1.00,
       "color": 0.66,
-      "environment": 0.66,
       "confidence": 1.00
     },
     "blocker_failed": false,
@@ -424,7 +398,6 @@ type DressCodeTier =
 | `validation_error` | 422 | 입력 검증 실패 |
 | `rate_limited` | 429 | 레이트 리밋 |
 | `agent_failed` | 502 | Vision/Recommendation 실패 |
-| `weather_unavailable` | 200 | (에러 아님, 정상 응답에 플래그) |
 
 ## 6. 변경 관리 규칙
 

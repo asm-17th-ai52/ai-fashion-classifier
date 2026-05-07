@@ -26,16 +26,15 @@
 | 인종·성별·연령 추론 | 편향 위험 |
 
 ### 2.3 평가 방식 — 이분법 체크리스트 (Binary Checklist)
-본 시스템은 **연속값 sub-score(0~100) + 가중합** 대신 **17개의 binary 체크 항목**을 평가한다.
+본 시스템은 **연속값 sub-score(0~100) + 가중합** 대신 **13개의 binary 체크 항목**을 평가한다.
 각 체크는 `pass / fail / not_applicable` 셋 중 하나로 결정적 함수가 산출한다.
 
 | 그룹 | 체크 수 | 예시 |
 |---|---|---|
-| Group A: 드레스코드 충족 | 6 | 신발 카테고리가 기대 범위에 포함, 평균 포멀니스가 기대 범위 안 |
+| Group A: 드레스코드 충족 | 5 | 신발 카테고리가 기대 범위에 포함, 평균 포멀니스가 기대 범위 안 |
 | Group B: 일관성 | 3 | top/bottom/shoes 포멀니스 표준편차 ≤ 15 |
 | Group C: 색상 | 3 | top-bottom ΔE2000 ∈ [10, 50], 강한 채도 의류 ≤ 1개 |
-| Group D: 환경 적합성 | 3 | 보온지수가 thermal_band 기대치와 일치, 강수 시 외투 보호 |
-| Group E: 신뢰도 메타 | 2 | Vision 평균 confidence ≥ 0.6, Context tier 신뢰도 |
+| Group D: 신뢰도 메타 | 2 | Vision 평균 confidence ≥ 0.6, Context tier 신뢰도 |
 
 **점수 산출:**
 ```
@@ -44,7 +43,7 @@ overall = mean(group_pass_rate) * 100
 if any blocker check failed: overall = min(overall, 50)
 ```
 
-가중치 튜닝 없이 그룹별 동등 가중. blocker 체크(예: A4 외투 누락 한겨울, A5 포멀니스 격차) 실패 시 cap 적용. 상세는 `04-agent-recommendation-spec.md` 참조.
+가중치 튜닝 없이 그룹별 동등 가중. blocker 체크(예: A5 포멀니스 격차, B3 필수 슬롯 누락) 실패 시 cap 적용. 상세는 `04-agent-recommendation-spec.md` 참조.
 
 ### 2.4 설명 가능성 (Explainability)
 - 모든 점수 변동의 원인은 정확히 N개의 failed check로 설명된다.
@@ -60,8 +59,8 @@ if any blocker check failed: overall = min(overall, 50)
 ### 포함 (3주)
 - 착장 단일 이미지 분석 (1인, 정면)
 - 의류 속성 추출(JSON) — 상의/하의/외투/신발
-- 일정 유형 + 외부 기온/강수 컨텍스트 반영
-- **17개 binary 체크 평가** + 그룹별 pass rate + blocker cap
+- 일정 유형 + 드레스코드 컨텍스트 반영
+- **13개 binary 체크 평가** + 그룹별 pass rate + blocker cap
 - failed check ↔ fix action 1:1 매핑으로 1~3개 제안 생성
 
 ### 제외
@@ -75,7 +74,7 @@ if any blocker check failed: overall = min(overall, 50)
 - 패션 도메인 지식이 적지만 "이 정도면 괜찮은가?"의 정량적 답을 원하는 사용자
 
 ## 5. 핵심 가치
-> 단순 코디 추천이 아니라, **현재 착장이 현재 상황(일정 + 날씨)에 맞는지를 정량 지표로 판정하고, 점수를 올릴 구체적 행동 1~3개를 제안한다.**
+> 단순 코디 추천이 아니라, **현재 착장이 현재 상황(일정)에 맞는지를 정량 지표로 판정하고, 점수를 올릴 구체적 행동 1~3개를 제안한다.**
 
 ## 6. 성공 지표 (KPI)
 
@@ -83,7 +82,7 @@ if any blocker check failed: overall = min(overall, 50)
 |---|---|---|---|
 | Schema Pass Rate | LLM 출력이 schema 검증 통과한 비율 | 서버 로그 | ≥ 98% |
 | Score Reproducibility | 동일 입력 5회 호출 시 종합 점수 표준편차 | 자동 테스트 | **= 0** (체크리스트는 100% 결정적) |
-| Check Stability | 동일 입력 5회 호출 시 17개 체크 결과 동일률 | 자동 테스트 | 100% |
+| Check Stability | 동일 입력 5회 호출 시 13개 체크 결과 동일률 | 자동 테스트 | 100% |
 | Latency (P95) | 업로드 → 결과 표시 | 클라이언트 측정 | ≤ 8초 |
 | Suggestion Acceptance | 제안 카드 "수용/거절" 클릭 비율 | 프론트 이벤트 | ≥ 50% |
 | Score-Suggestion Coherence | 제안 적용 시 종합 점수 시뮬레이션 증가량 | 자동 검증 | ≥ +5점 |
