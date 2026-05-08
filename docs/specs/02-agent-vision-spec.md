@@ -408,21 +408,21 @@ Backend는 `analyze_outfit` 을 호출해 Vision Agent를 사용한다 (`05-back
 ## 12. 테스트 전략
 
 ### 12.1 골든 셋
-- `tests/fixtures/vision/` — 라벨링된 이미지 5장 + `expected.json` (MVP)
+- `tests/fixtures/vision/` — 라벨링된 이미지 20장 + `expected.json`
 - 카테고리 일치율 ≥ 80% (slot별 category)
 - 색상 RGB 정확도: extract_dominant_rgb 결과가 수동 측정값과 ΔE2000 ≤ 15
 
-### 12.2 단위 테스트 (현재 구현)
+### 12.2 단위 테스트
+- 각 Verifier 함수: 정상/위반 케이스 ≥ 5개씩
+- Critic 응답 mock → ReextractPlan 파싱
+- color overwrite: VLM이 잘못된 색상을 반환해도 최종 응답은 OpenCV 값
 
-`tests/agents/vision/test_graph.py`:
-- **시나리오 A (정상 흐름)**: 해상도 통과 → VLM 추출 → 색상 덮어쓰기 → garments 반환
-- **시나리오 B (해상도 미달)**: 480p 미만 → `state.error` 설정, VLM 미호출
-- **시나리오 C (VLM 실패)**: 2회 연속 예외 → `state.error` 설정
-
-### 12.3 워크플로우 테스트 (Step 2 이후 추가 예정)
-- **시나리오 D**: color 불일치 → critic → top 재추출 → 통과 (2 step)
-- **시나리오 E**: 재추출 후에도 위반 → 부분 결과 + warnings (3 step)
-- **시나리오 F**: VLM 환각 (의류 5개 중 1개 가짜) → consistency 위반 → 제거
+### 12.3 워크플로우 테스트
+- **시나리오 A**: 1 step 통과 (verifier 모두 OK)
+- **시나리오 B**: color 불일치 → critic → top 재추출 → 통과 (2 step)
+- **시나리오 C**: 재추출 후에도 위반 → 부분 결과 + warnings (3 step)
+- **시나리오 D**: 사람 미검출 → 즉시 400
+- **시나리오 E**: VLM 환각 (의류 5개 중 1개 가짜) → consistency 위반 → 제거
 
 ### 12.4 회귀 테스트
 - 동일 입력 5회 호출 시 카테고리 일치 100% (LLM temperature=0)
@@ -430,28 +430,27 @@ Backend는 `analyze_outfit` 을 호출해 Vision Agent를 사용한다 (`05-back
 
 ### 12.5 Agentic 동작 검증
 - `agent_meta.steps_taken` 분포 측정 (목표: 1 step 통과 ≥ 70%, 2 step ≥ 25%, 3 step ≤ 5%)
+- Critic 호출 비율 측정
 
 ## 13. 성능 목표
 
 | 지표 | 목표 |
 |---|---|
-| Latency P50 (1 step 통과) | ≤ 3.5s (rembg 처리 포함) |
-| Latency P95 (3 step) | ≤ 7.0s |
+| Latency P50 (1 step 통과) | ≤ 2.8s |
+| Latency P95 (3 step) | ≤ 6.5s |
 | 1 step 통과율 | ≥ 70% |
 | 색상 RGB 정확도 (ΔE) | ≤ 15 (수동 측정 대비) |
-| 카테고리 정확도 (골든 5장) | ≥ 80% |
+| 카테고리 정확도 (골든 20장) | ≥ 80% |
 | Schema Pass Rate (최종) | ≥ 99% (재시도 후) |
 | VLM 평균 호출 수 | ≤ 1.4회 |
 
-## 14. 구현 마일스톤
+## 14. 마일스톤
 
-| 단계 | 내용 | 상태 |
-|---|---|---|
-| Step 0 | `validate_image` (해상도·정면 검증) | ✅ 완료 |
-| Step 1 | VLM 1차 추출 + rembg/k-means 색상 덮어쓰기 (hybrid) | ✅ 완료 |
-| Step 2 | Verifier 5종 (vocab, duplicate, color, required, schema) | 🔲 예정 |
-| Step 3 | Critic LLM + Targeted re-extract + 워크플로우 테스트 전체 | 🔲 예정 |
-| 성능 | 골든 5장 통과, latency 측정, agentic 동작 검증 | 🔲 예정 |
+| 주차 | 산출물 |
+|---|---|
+| 1주차 | Step 0 결정적 도구(validate, dominant_rgb) + Step 1 VLM 1차 추출 + 골든 5장 |
+| 2주차 | Verifier 5종 + 색상 overwrite + 골든 20장 통과 |
+| 3주차 | Critic LLM + Targeted re-extract + 워크플로우 테스트 5개 시나리오 + 메트릭 |
 
 ## 15. 다른 역할과의 인터페이스
 
