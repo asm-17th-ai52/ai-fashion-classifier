@@ -9,6 +9,7 @@ VLM(Gemini) 호출은 unittest.mock으로 대체해 실제 API 키 없이 실행
   C: VLM 호출 실패 → state.error 설정 (502 에러 흐름)
 """
 import io
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from PIL import Image
@@ -55,6 +56,24 @@ _MOCK_VLM_GARMENTS = [
     },
 ]
 
+# google.genai SDK는 client.models.generate_content().text로 JSON 문자열을 반환합니다.
+_MOCK_VLM_JSON = json.dumps({"garments": _MOCK_VLM_GARMENTS})
+
+
+def _make_mock_client(json_text: str = _MOCK_VLM_JSON, side_effect=None) -> MagicMock:
+    """
+    google.genai Client mock을 생성합니다.
+    client.models.generate_content(...)  →  response.text = json_text
+    """
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = json_text
+    if side_effect:
+        mock_client.models.generate_content.side_effect = side_effect
+    else:
+        mock_client.models.generate_content.return_value = mock_response
+    return mock_client
+
 
 # ──────────────────────────────────────────────
 # 시나리오 A: 정상 흐름
@@ -69,20 +88,10 @@ class TestScenarioA_정상흐름:
         """
         image = _make_image_bytes(640, 960)
 
-        # VLM 호출을 목으로 대체합니다.
-        mock_output = MagicMock()
-        mock_output.garments = [MagicMock(**g) for g in _MOCK_VLM_GARMENTS]
-
-        with patch(
-            "app.agents.vision.nodes.step1_nodes._build_llm"
-        ) as mock_build_llm:
-            mock_llm = MagicMock()
-            mock_llm.with_structured_output.return_value.invoke.return_value = mock_output
-            mock_build_llm.return_value = mock_llm
-
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client()
             graph = build_vision_graph()
-            initial = VisionState(session_id="test-001", image=image)
-            result = graph.invoke(initial.model_dump())
+            result = graph.invoke(VisionState(session_id="test-001", image=image).model_dump())
 
         assert result["error"] is None
         assert len(result["garments"]) == 2
@@ -95,17 +104,10 @@ class TestScenarioA_정상흐름:
         """
         image = _make_image_bytes(640, 960)
 
-        mock_output = MagicMock()
-        mock_output.garments = [MagicMock(**g) for g in _MOCK_VLM_GARMENTS]
-
-        with patch("app.agents.vision.nodes.step1_nodes._build_llm") as mock_build_llm:
-            mock_llm = MagicMock()
-            mock_llm.with_structured_output.return_value.invoke.return_value = mock_output
-            mock_build_llm.return_value = mock_llm
-
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client()
             graph = build_vision_graph()
-            initial = VisionState(session_id="test-002", image=image)
-            result = graph.invoke(initial.model_dump())
+            result = graph.invoke(VisionState(session_id="test-002", image=image).model_dump())
 
         for garment in result["garments"]:
             color = garment["primary_color"] if isinstance(garment, dict) else garment.primary_color
@@ -115,18 +117,12 @@ class TestScenarioA_정상흐름:
     def test_tool_call_log_기록(self):
         """validate_image와 vlm_extract_all, overwrite_colors 실행 기록이 모두 남아야 합니다."""
         image = _make_image_bytes(640, 960)
+        single_garment_json = json.dumps({"garments": [_MOCK_VLM_GARMENTS[0]]})
 
-        mock_output = MagicMock()
-        mock_output.garments = [MagicMock(**_MOCK_VLM_GARMENTS[0])]
-
-        with patch("app.agents.vision.nodes.step1_nodes._build_llm") as mock_build_llm:
-            mock_llm = MagicMock()
-            mock_llm.with_structured_output.return_value.invoke.return_value = mock_output
-            mock_build_llm.return_value = mock_llm
-
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client(json_text=single_garment_json)
             graph = build_vision_graph()
-            initial = VisionState(session_id="test-003", image=image)
-            result = graph.invoke(initial.model_dump())
+            result = graph.invoke(VisionState(session_id="test-003", image=image).model_dump())
 
         tool_names = [log["tool"] for log in result["tool_call_log"]]
         assert "validate_image" in tool_names
@@ -156,13 +152,10 @@ class TestScenarioB_해상도미달:
         """해상도 검증 실패 시 VLM이 호출되면 안 됩니다."""
         image = _make_image_bytes(300, 300)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_llm") as mock_build_llm:
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
             graph = build_vision_graph()
-            initial = VisionState(session_id="test-005", image=image)
-            graph.invoke(initial.model_dump())
-
-            # VLM 클라이언트 빌더가 호출되지 않아야 합니다.
-            mock_build_llm.assert_not_called()
+            graph.invoke(VisionState(session_id="test-005", image=image).model_dump())
+            mock_build.assert_not_called()
 
 
 # ──────────────────────────────────────────────
@@ -175,15 +168,10 @@ class TestScenarioC_VLM실패:
         """VLM 호출이 2회 모두 실패하면 state.error가 설정되어야 합니다."""
         image = _make_image_bytes(640, 960)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_llm") as mock_build_llm:
-            mock_llm = MagicMock()
-            # invoke를 호출할 때마다 예외를 발생시킵니다.
-            mock_llm.with_structured_output.return_value.invoke.side_effect = Exception("API 오류")
-            mock_build_llm.return_value = mock_llm
-
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client(side_effect=Exception("API 오류"))
             graph = build_vision_graph()
-            initial = VisionState(session_id="test-006", image=image)
-            result = graph.invoke(initial.model_dump())
+            result = graph.invoke(VisionState(session_id="test-006", image=image).model_dump())
 
         assert result["error"] is not None
         assert "VLM" in result["error"]

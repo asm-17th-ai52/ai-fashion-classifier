@@ -17,8 +17,16 @@ from .color_lookup import rgb_to_korean_name
 
 
 # K-means 클러스터 수: 색상을 K개 그룹으로 분류합니다.
-# 값이 클수록 세밀하지만 느립니다. 3이 속도·정확도 균형에 적합합니다.
-KMEANS_K = 3
+# 값이 클수록 세밀하지만 느립니다. 5로 높여 배경과 의류를 더 잘 구분합니다.
+KMEANS_K = 5
+
+# 배경으로 판단하는 밝기 임계값: R+G+B 합이 이 값 이상이면 배경으로 간주합니다.
+# 255*3=765가 최대(순백)이므로 520은 약 68% 밝기 이상을 배경으로 처리합니다.
+_BG_BRIGHTNESS_THRESHOLD = 520
+
+# 가로 중앙 비율: 배경이 많은 좌우 가장자리를 제외하고 인물 중심부만 분석합니다.
+_CENTER_X_START = 0.20
+_CENTER_X_END   = 0.80
 
 # 슬롯별 수직 영역 비율 (이미지 높이 기준).
 # 튜플: (시작 비율, 끝 비율). 예: (0.15, 0.55)는 상단 15%~55% 구간.
@@ -35,19 +43,22 @@ _SLOT_VERTICAL_HINTS: dict[str, tuple[float, float]] = {
 def _get_slot_bbox(image_size: tuple[int, int], slot: str) -> tuple[int, int, int, int]:
     """
     슬롯 이름과 이미지 크기를 받아 해당 슬롯의 예상 영역(bbox)을 반환합니다.
+    가로는 중앙 60%만 사용해 좌우 배경을 제외합니다.
 
     Args:
       image_size: (가로, 세로) 픽셀 크기
       slot: "top", "bottom", "outer", "shoes", "bag", "watch" 중 하나
 
     Returns:
-      (x1, y1, x2, y2) 형태의 픽셀 좌표. x는 이미지 전체 너비를 사용합니다.
+      (x1, y1, x2, y2) 형태의 픽셀 좌표.
     """
     width, height = image_size
     y_start_ratio, y_end_ratio = _SLOT_VERTICAL_HINTS.get(slot, (0.0, 1.0))
+    x1 = int(width * _CENTER_X_START)
+    x2 = int(width * _CENTER_X_END)
     y1 = int(height * y_start_ratio)
     y2 = int(height * y_end_ratio)
-    return (0, y1, width, y2)
+    return (x1, y1, x2, y2)
 
 
 def extract_dominant_rgb(
@@ -95,9 +106,18 @@ def extract_dominant_rgb(
         pixel_array, KMEANS_K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS
     )
 
-    # 픽셀 수가 가장 많은 클러스터의 중심 색상을 선택합니다.
+    # 픽셀 수 기준으로 클러스터를 내림차순 정렬합니다.
     counts = np.bincount(labels.flatten())
-    dominant_center = centers[np.argmax(counts)].astype(int)
+    sorted_idx = np.argsort(counts)[::-1]
+
+    # 배경으로 추정되는 밝은 클러스터를 건너뛰고 의류 색상을 선택합니다.
+    # 모든 클러스터가 밝으면 가장 많은 클러스터를 그대로 사용합니다.
+    dominant_center = centers[sorted_idx[0]].astype(int)
+    for idx in sorted_idx:
+        c = centers[idx].astype(int)
+        if int(c[0]) + int(c[1]) + int(c[2]) < _BG_BRIGHTNESS_THRESHOLD:
+            dominant_center = c
+            break
 
     rgb = (int(dominant_center[0]), int(dominant_center[1]), int(dominant_center[2]))
     name = rgb_to_korean_name(rgb)
