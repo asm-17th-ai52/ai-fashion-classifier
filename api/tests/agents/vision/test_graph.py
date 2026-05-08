@@ -175,3 +175,52 @@ class TestScenarioC_VLM실패:
 
         assert result["error"] is not None
         assert "VLM" in result["error"]
+
+
+# ──────────────────────────────────────────────
+# 시나리오 D: Step 2 Verifier 통합
+# ──────────────────────────────────────────────
+
+class TestScenarioD_Verifier통합:
+
+    def test_정상_흐름에서_violations_없음(self):
+        """정상 흐름에서 Verifier를 통과하면 violations가 비어야 합니다."""
+        image = _make_image_bytes(640, 960)
+
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client()
+            graph = build_vision_graph()
+            result = graph.invoke(VisionState(session_id="test-007", image=image).model_dump())
+
+        assert result["violations"] == []
+
+    def test_verifier_tool_call_log_기록(self):
+        """run_verifiers 실행 기록이 tool_call_log에 남아야 합니다."""
+        image = _make_image_bytes(640, 960)
+
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client()
+            graph = build_vision_graph()
+            result = graph.invoke(VisionState(session_id="test-008", image=image).model_dump())
+
+        tool_names = [log["tool"] for log in result["tool_call_log"]]
+        assert "verify_vocabulary" in tool_names
+        assert "verify_no_duplicate_slot" in tool_names
+        assert "verify_color_label_consistency" in tool_names
+        assert "verify_schema" in tool_names
+        assert "verify_required_slots" in tool_names
+
+    def test_missing_slot_경고_추가(self):
+        """필수 슬롯이 누락되면 warnings에 'missing_slot:*'이 추가되어야 합니다."""
+        image = _make_image_bytes(640, 960)
+        # top 슬롯만 있는 단일 garment 응답
+        single_garment_json = json.dumps({"garments": [_MOCK_VLM_GARMENTS[0]]})
+
+        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+            mock_build.return_value = _make_mock_client(json_text=single_garment_json)
+            graph = build_vision_graph()
+            result = graph.invoke(VisionState(session_id="test-009", image=image).model_dump())
+
+        # top만 있으므로 bottom, shoes 누락 경고가 있어야 합니다.
+        missing_warnings = [w for w in result["warnings"] if w.startswith("missing_slot:")]
+        assert len(missing_warnings) >= 1
