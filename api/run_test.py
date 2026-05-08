@@ -2,8 +2,9 @@
 Vision Agent end-to-end 테스트 스크립트.
 
 사용법:
-  python3 run_test.py
-  python3 run_test.py ../data/test_cases/다른이미지.jpg
+  python3 run_test.py                                     # 기본 로컬 이미지
+  python3 run_test.py ../data/test_cases/다른이미지.jpg   # 로컬 파일 경로
+  python3 run_test.py https://example.com/outfit.jpg     # 웹 이미지 URL
 """
 import asyncio
 import sys
@@ -12,17 +13,31 @@ sys.path.insert(0, ".")
 from dotenv import load_dotenv
 load_dotenv("../.env", override=True)
 
+import httpx
 from app.agents.vision import analyze_outfit
 
-# 인자로 이미지 경로를 받거나, 기본값 사용
-IMAGE_PATH = sys.argv[1] if len(sys.argv) > 1 else "../data/test_cases/test_casual.jpg"
+DEFAULT_IMAGE = "../data/test_cases/test_casual.jpg"
+SOURCE = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_IMAGE
+
+
+def _load_image(source: str) -> tuple[bytes, str]:
+    """
+    로컬 경로 또는 URL에서 이미지 바이트를 불러옵니다.
+    Returns: (image_bytes, label) - label은 로그 출력용 식별자
+    """
+    if source.startswith("http://") or source.startswith("https://"):
+        response = httpx.get(source, follow_redirects=True, timeout=15)
+        response.raise_for_status()
+        return response.content, source
+    else:
+        with open(source, "rb") as f:
+            return f.read(), source
 
 
 async def main():
-    with open(IMAGE_PATH, "rb") as f:
-        image_bytes = f.read()
+    image_bytes, label = _load_image(SOURCE)
 
-    print(f"이미지: {IMAGE_PATH} ({len(image_bytes) / 1024:.1f} KB)")
+    print(f"이미지: {label} ({len(image_bytes) / 1024:.1f} KB)")
     print("분석 중...\n")
 
     result = await analyze_outfit(session_id="test-001", image_bytes=image_bytes)
