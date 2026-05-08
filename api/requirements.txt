@@ -8,6 +8,10 @@ opencv-python>=4.9.0
 Pillow>=10.0.0
 numpy>=1.24.0
 
+# 배경 제거 (의류 색상 추출 정확도 향상)
+rembg>=2.0.50
+onnxruntime>=1.17.0
+
 # 스키마 및 유효성 검사
 pydantic>=2.0.0
 
