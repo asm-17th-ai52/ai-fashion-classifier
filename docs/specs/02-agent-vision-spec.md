@@ -10,7 +10,7 @@
 
 | Agentic 속성 | 본 Agent 구현 |
 |---|---|
-| **Tool use** | OpenCV 색상 추출, MediaPipe 포즈/얼굴, schema validator, consistency checker 등 결정적 도구 5종 호출 |
+| **Tool use** | rembg 배경 제거, OpenCV k-means 색상 추출, schema validator, consistency checker 등 결정적 도구 호출 |
 | **Self-critique** | Verifier 결과를 보고 어떤 필드가 잘못되었는지 자기 진단 |
 | **Multi-step** | Extract → Verify → Critic → Targeted Re-extract (최대 3 step) |
 | **Adaptive routing** | Verifier 통과 시 1 step 종료, 실패 시 부분 재호출 (전체 재호출 금지) |
@@ -19,8 +19,8 @@
 ## 2. 책임 (Responsibilities)
 
 1. 이미지 입력 검증 (해상도, 인물 존재, 정면성) — 결정적 도구
-2. 슬롯별 ROI 자동 산출 (포즈 키포인트 기반)
-3. VLM으로 의류 속성 1차 추출 (전체 슬롯 일괄)
+2. 슬롯별 수직 영역 산출 (이미지 높이 비율 휴리스틱 기반)
+3. VLM으로 의류 속성 1차 추출 (전체 슬롯 일괄) + `color_hint` 반환
 4. 결정적 Verifier로 추출 결과 검증 (색상 일치, 어휘 위반, 슬롯 중복 등)
 5. Verifier 위반 시 Critic LLM이 재추출 대상 결정
 6. Targeted re-extraction (위반 슬롯만 ROI 잘라 재호출)
@@ -37,6 +37,7 @@
 | 가격 / 브랜드 추정 | 신뢰성 부족 |
 | 트렌드 분석 | MVP 범위 외 |
 | Recommendation 차원 점수 계산 | 책임 분리 위반 |
+| 포즈 / 얼굴 감지 (MediaPipe) | MVP 범위 외, 별도 없이 휴리스틱으로 대체 |
 
 ## 4. 입력 / 출력
 
@@ -58,12 +59,10 @@ class VisionRequest(BaseModel):
   "verifiers_failed": ["color_label_consistency"],
   "reextracted_slots": ["top"],
   "tool_call_log": [
-    {"tool": "pose_keypoints", "ms": 45},
-    {"tool": "vlm_extract", "ms": 2300, "scope": "all"},
-    {"tool": "extract_dominant_rgb", "ms": 12, "slot": "top"},
-    {"tool": "verify_color_label_consistency", "ms": 1, "passed": false},
-    {"tool": "critic_llm", "ms": 380, "decision": "reextract_top_color"},
-    {"tool": "vlm_extract", "ms": 1800, "scope": "top"}
+    {"tool": "validate_image", "ms": 12},
+    {"tool": "vlm_extract_all", "ms": 2300, "garment_count": 4},
+    {"tool": "overwrite_colors", "slot": "outer", "source": "kmeans", "ms": 45, "rgb": [199, 152, 120], "name": "카멜"},
+    {"tool": "overwrite_colors", "slot": "top", "source": "vlm_hint", "ms": 0, "rgb": [255, 255, 255], "name": "흰색"}
   ]
 }
 ```
@@ -75,39 +74,52 @@ class VisionRequest(BaseModel):
 | Tool | 입력 | 출력 | 라이브러리 |
 |---|---|---|---|
 | `validate_image(bytes)` | 이미지 바이트 | `ImageQuality{resolution_ok, frontal, occlusion_ratio}` | Pillow + OpenCV |
-| `pose_keypoints(image)` | 이미지 | `Keypoints{shoulders, hips, knees, ankles, ...}` + `slot_bboxes{top, bottom, outer, shoes}` | MediaPipe Pose |
-| `face_detector(image)` | 이미지 | `face_bboxes` (블러 적용 검증용) | MediaPipe Face |
-| `extract_dominant_rgb(image, bbox)` | 이미지 + 영역 | `RGB(int, int, int)` | OpenCV (k-means k=3, 가장 많은 클러스터) |
+| `extract_dominant_rgb(image, slot, bbox?)` | 이미지 + 슬롯명 | `(RGB(int,int,int), 한글색상명)` | rembg(배경 제거) + OpenCV k-means (k=5) |
 | `verify_schema(json)` | LLM 응답 | `{valid: bool, errors: [...]}` | Pydantic |
 | `verify_vocabulary(garments)` | 의류 리스트 | 위반 enum 필드 목록 | 어휘 화이트리스트 lookup |
-| `verify_color_label_consistency(garment)` | 단일 garment | RGB ↔ name 매칭 일치 여부 | RGB → 색상 분류 룩업 (web color → 한글 라벨) |
+| `verify_color_label_consistency(garment)` | 단일 garment | RGB ↔ name 매칭 일치 여부 | color_lookup 테이블 |
 | `verify_no_duplicate_slot(garments)` | 의류 리스트 | 슬롯 중복 여부 | 단순 카운트 |
-| `verify_required_slots(garments, event_type?)` | 의류 리스트 | 누락 슬롯 목록 | (event_type 미주어지면 [top, bottom, shoes]가 기본 필수) |
-| `clip_image_by_bbox(image, bbox, padding=20px)` | 이미지 + 영역 | 잘린 이미지 | Pillow |
+| `verify_required_slots(garments)` | 의류 리스트 | 누락 슬롯 목록 | (`top`, `bottom`, `shoes` 기본 필수) |
+| `clip_image_by_bbox(image, bbox)` | 이미지 + 영역 | 잘린 이미지 | Pillow |
+
+**`extract_dominant_rgb` 상세:**
+- rembg로 배경(벽, 가구 등) 제거 후 사람 픽셀만 남긴다.
+- 슬롯별 수직 비율 힌트로 영역을 자른다 (예: `bottom`은 이미지 높이 58~82%).
+- 가로는 중앙 60%만 사용해 팔·손 피부 픽셀을 제외한다.
+- k=5 k-means로 지배적 색상을 선택한다.
+- rembg 미설치 환경에서는 밝기 임계값(R+G+B < 520) fallback을 사용한다.
 
 ### 5.2 LLM 도구
 
 | Tool | 호출 횟수 | 모델 | temperature |
 |---|---|---|---|
-| `vlm_extract(image, scope, prev_result?)` | 1~2회 | GPT-4o Vision (또는 동등 VLM) | 0 |
-| `critic_llm(extraction, violations)` | 0~1회 | GPT-4o-mini (또는 텍스트만 가능한 경량 모델) | 0 |
+| `vlm_extract_all(image)` | 1~2회 | Gemini 2.5 Flash (`google.genai` SDK) | 0 |
+| `critic_llm(extraction, violations)` | 0~1회 | Gemini 2.5 Flash (또는 경량 텍스트 모델) | 0 |
 
 ## 6. 워크플로우 (Verify-and-Refine 루프)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ Step 0: 결정적 전처리                                    │
-│   validate_image() → person_detected? frontal?          │
-│   pose_keypoints() → slot_bboxes                        │
-│   face_detector() → blur 검증                            │
+│   validate_image() → resolution_ok? frontal?            │
 │   실패 시 즉시 400 (Backend로 에러 전파)                  │
 └─────────────────────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────┐
 │ Step 1: VLM 1차 추출 (전체 슬롯)                         │
-│   vlm_extract(image, scope="all")                       │
-│   → garments[] (LLM 출력)                                │
+│   vlm_extract_all(image)                                │
+│   → garments[] (category, pattern, fit, color_hint 등)  │
+└─────────────────────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────┐
+│ Step 1-B: 색상 덮어쓰기                                  │
+│   for each garment:                                     │
+│     가려진 슬롯 (예: outer 아래 top)                      │
+│       → VLM color_hint 사용                              │
+│     노출된 슬롯                                           │
+│       → rembg + k-means → primary_color 덮어쓰기         │
 └─────────────────────────────────────────────────────────┘
                   │
                   ▼
@@ -116,10 +128,7 @@ class VisionRequest(BaseModel):
 │   - verify_schema(json)                                 │
 │   - verify_vocabulary(garments)                         │
 │   - verify_no_duplicate_slot(garments)                  │
-│   - for each garment:                                    │
-│       extract_dominant_rgb(image, slot_bbox)             │
-│       verify_color_label_consistency(garment, true_rgb)  │
-│       (LLM의 RGB도 함께 비교 + true_rgb로 덮어쓰기)         │
+│   - verify_color_label_consistency(garments)            │
 │   - verify_required_slots(garments)                     │
 │   → violations[] (각 항목: {type, slot, detail})         │
 └─────────────────────────────────────────────────────────┘
@@ -143,7 +152,7 @@ class VisionRequest(BaseModel):
 ┌─────────────────────────────────────────────────────────┐
 │ Step 4: Targeted Re-extract                             │
 │   for slot in plan.slots:                                │
-│     cropped = clip_image_by_bbox(image, slot_bboxes[slot])│
+│     cropped = clip_image_by_bbox(image, slot_bbox)       │
 │     vlm_extract(cropped, scope=slot, prev_result=...)    │
 │   merge into garments[]                                  │
 └─────────────────────────────────────────────────────────┘
@@ -163,13 +172,16 @@ class VisionRequest(BaseModel):
 - 또는 Critic이 `give_up=true`
 - 또는 latency 누적 > 7초 (timeout, 부분 결과 반환)
 
-### 6.2 RGB 우선 원칙
-- VLM이 보고한 RGB는 **참고용** (LLM 환각 가능성)
-- 모든 garment의 `primary_color.rgb` 는 항상 `extract_dominant_rgb(image, slot_bbox)` 의 결과로 **덮어쓴다**.
-- 색상 `name` 도 RGB → 한글 색상 라벨 룩업으로 결정적으로 산출 (LLM의 name 무시).
-- 즉, **색상은 VLM이 추정하지 않는다.** VLM은 카테고리·패턴·소재·핏만 담당.
+### 6.2 색상 결정 원칙 (Hybrid Strategy)
 
-이 원칙으로 정량성·재현성을 크게 강화한다.
+| 슬롯 조건 | 색상 결정 방식 |
+|---|---|
+| 외부 노출 슬롯 (outer, bottom, shoes 등) | rembg 배경 제거 후 k-means 픽셀 분석 |
+| 가려진 슬롯 (`top` + `outer` 동시 감지 등) | VLM `color_hint` (의미론적 추정) 사용 |
+
+- VLM은 `color_hint`를 반드시 허용된 한글 색상 이름 enum 중 하나로 반환한다 (테이블 외 이름 불허).
+- 픽셀 분석 결과가 `(0,0,0)` (유효 픽셀 없음)이면 `color_hint` fallback 사용.
+- 색상 `name`은 항상 `color_lookup` 테이블 기반으로 결정 (LLM의 자유 텍스트 이름 무시).
 
 ## 7. VLM 프롬프트 설계
 
@@ -180,19 +192,20 @@ You are a clothing attribute extractor. Output JSON ONLY matching the
 provided schema. Use ONLY allowed enum values. Do not infer wearer's
 identity, body shape, age, gender, or aesthetic judgment.
 
-For each garment slot present in the image (top, bottom, outer, shoes,
-bag, watch), return: category, subcategory, pattern, estimated_material,
-fit, sleeve_length, formality_label, confidence.
+For color_hint, output the Korean color name that best describes the
+garment's color. Choose ONLY from the allowed list in the schema.
+color_hint is a semantic judgment — for partially hidden garments
+(e.g., a shirt under a coat), estimate based on visible portion.
 
-DO NOT output color RGB values. Color will be measured separately by
-deterministic tools. Set primary_color to {"rgb": [0,0,0], "name": "_pending"}
-as placeholder; it will be overwritten.
+For each garment slot present in the image (top, bottom, outer, shoes,
+bag, watch), return: category, subcategory, color_hint, pattern,
+estimated_material, fit, sleeve_length, formality_label, confidence.
 
 If a field is uncertain, use "unknown" and confidence ≤ 0.5.
 
 [USER]
 Extract garment attributes from this image.
-Return JSON: <schema>
+Return JSON: <schema with color_hint enum list>
 ```
 
 ### 7.2 부분 재추출 (scope="top" 등)
@@ -224,14 +237,11 @@ Violations: <list>
 
 ### 8.1 verify_color_label_consistency
 ```
-input: garment{primary_color.rgb (LLM 보고치), primary_color.name}, true_rgb (OpenCV)
+input: garment{primary_color.rgb, primary_color.name}
 algorithm:
-  1. ΔE2000(LLM_rgb, true_rgb) > 25 → violation: "vlm_rgb_mismatch"
-  2. RGB → 한글 라벨 lookup (color_lookup.csv) ≠ garment.primary_color.name → violation: "name_rgb_mismatch"
+  RGB → 한글 라벨 lookup (color_lookup 테이블) ≠ garment.primary_color.name → violation: "name_rgb_mismatch"
 output: violation 또는 None
 ```
-- 단, **이 verifier는 정보용**이다. 최종 RGB는 항상 OpenCV 값으로 덮어쓰므로 LLM 라벨이 틀려도 결과에는 영향 없음.
-- 하지만 카테고리·패턴 추정도 색상 인식에 의존하므로, 큰 불일치는 다른 필드 신뢰도가 낮다는 신호.
 
 ### 8.2 verify_vocabulary
 - 모든 enum 필드가 화이트리스트 안에 있는지 확인.
@@ -243,7 +253,6 @@ output: violation 또는 None
 
 ### 8.4 verify_required_slots
 - 기본 필수: `top`, `bottom`, `shoes`
-- thermal_band가 cold 이상일 때 (Backend가 별도로 검증, Vision은 알지 못함)
 - 누락 시 warnings에 추가, violation은 아님 (재촬영 권장 메시지 표시)
 
 ### 8.5 verify_schema
@@ -262,7 +271,7 @@ output: violation 또는 None
 
 | 상황 | 처리 |
 |---|---|
-| `validate_image` 실패 (사람 미검출 등) | Backend로 400 즉시 전파 |
+| `validate_image` 실패 (해상도 미달 등) | `state.error` 설정 → Backend로 400 즉시 전파 |
 | Step 1 VLM 호출 실패 (네트워크) | 재시도 1회 → 502 |
 | Step 1 schema 위반 | 자동 재추출 (critic 미사용) |
 | Step 3 Critic이 give_up | 부분 결과 + warnings, garment confidence 강제 0.4 |
@@ -284,7 +293,7 @@ class VisionState(BaseModel):
 
     # Step 0 산출물
     quality: Optional[ImageQuality] = None
-    slot_bboxes: dict = {}
+    slot_bboxes: dict = {}          # 슬롯별 bbox (현재 미사용, Step 2 이후 활용 예정)
 
     # Step 1+ 산출물
     garments: list[Garment] = []
@@ -299,6 +308,14 @@ class VisionState(BaseModel):
     vlm_calls: int = 0
     tool_call_log: list[dict] = []
     warnings: list[str] = []
+    error: Optional[str] = None     # 치명적 에러 (설정 시 Backend로 400 전파)
+```
+
+`Garment` 스키마에 추가된 필드:
+```python
+class Garment(BaseModel):
+    # ... 기존 필드 ...
+    color_hint: Optional[str] = None  # VLM 의미론적 색상 추정 (가려진 슬롯 fallback용)
 ```
 
 ### 11.2 그래프 정의
@@ -311,52 +328,28 @@ def build_vision_graph():
 
     # 결정적 도구 노드
     g.add_node("validate_image", node_validate_image)
-    g.add_node("pose_keypoints", node_pose_keypoints)
-    g.add_node("face_blur_check", node_face_blur_check)
+    g.add_node("overwrite_colors", node_overwrite_colors)
 
     # LLM 노드
     g.add_node("vlm_extract_all", node_vlm_extract_all)
-    g.add_node("vlm_extract_targeted", node_vlm_extract_targeted)
-    g.add_node("critic_llm", node_critic_llm)
+    g.add_node("vlm_extract_targeted", node_vlm_extract_targeted)  # TODO: Step 3
+    g.add_node("critic_llm", node_critic_llm)                      # TODO: Step 3
 
-    # Verifier 노드 (병렬 실행 후 합류)
-    g.add_node("run_verifiers", node_run_verifiers)
-    g.add_node("overwrite_colors", node_overwrite_colors)
+    # Verifier 노드
+    g.add_node("run_verifiers", node_run_verifiers)                 # TODO: Step 2
 
     g.set_entry_point("validate_image")
 
-    # Step 0 직선
-    g.add_edge("validate_image", "pose_keypoints")
-    g.add_edge("pose_keypoints", "face_blur_check")
-    g.add_edge("face_blur_check", "vlm_extract_all")
+    # Step 0 → Step 1
+    g.add_conditional_edges(
+        "validate_image",
+        _route_after_validate,
+        {"ok": "vlm_extract_all", "fail": END}
+    )
 
-    # Step 1 → Verify (색상 항상 덮어쓰기)
+    # Step 1 → 색상 덮어쓰기 → (Step 2 이후 추가 예정)
     g.add_edge("vlm_extract_all", "overwrite_colors")
-    g.add_edge("overwrite_colors", "run_verifiers")
-
-    # 분기: violations 비어있으면 END, 아니면 critic
-    g.add_conditional_edges(
-        "run_verifiers",
-        decide_after_verify,   # 함수: violations + steps_taken 확인
-        {
-            "done": END,
-            "critic": "critic_llm",
-            "exhausted": END,   # steps_taken ≥ 3
-        }
-    )
-
-    # Critic 분기: give_up이면 END, 아니면 targeted re-extract
-    g.add_conditional_edges(
-        "critic_llm",
-        decide_after_critic,
-        {
-            "reextract": "vlm_extract_targeted",
-            "give_up": END,
-        }
-    )
-
-    # Re-extract 후 다시 verify
-    g.add_edge("vlm_extract_targeted", "overwrite_colors")
+    g.add_edge("overwrite_colors", END)   # Step 2 구현 후 "run_verifiers"로 변경
 
     return g.compile()
 
@@ -366,6 +359,12 @@ vision_subgraph = build_vision_graph()
 ### 11.3 분기 함수
 
 ```python
+def _route_after_validate(state: VisionState) -> str:
+    """이미지 검증 실패 시 즉시 종료."""
+    if state.error:
+        return "fail"
+    return "ok"
+
 def decide_after_verify(state: VisionState) -> str:
     if not state.violations:
         return "done"
@@ -385,74 +384,74 @@ def decide_after_critic(state: VisionState) -> str:
 
 각 노드는 **단일 책임**: 한 가지 도구 호출 또는 한 가지 LLM 호출. State를 받아 부분 업데이트(dict)를 반환.
 
-| 노드 | 책임 | 결정성 |
-|---|---|---|
-| `validate_image` | 사람 검출, 해상도 | ✓ |
-| `pose_keypoints` | 슬롯 ROI 산출 | ✓ |
-| `face_blur_check` | 블러 적용 검증 | ✓ |
-| `vlm_extract_all` | 1차 의류 속성 추출 (color 제외) | LLM, t=0 |
-| `overwrite_colors` | OpenCV로 RGB 측정해 garment 덮어쓰기 | ✓ |
-| `run_verifiers` | schema/vocab/duplicate/required 검증 일괄 | ✓ |
-| `critic_llm` | 재추출 대상 결정 | LLM, t=0 |
-| `vlm_extract_targeted` | 특정 슬롯만 재추출 | LLM, t=0 |
+| 노드 | 책임 | 결정성 | 구현 상태 |
+|---|---|---|---|
+| `validate_image` | 해상도 검증, person_detected | ✓ | 완료 |
+| `vlm_extract_all` | 1차 의류 속성 추출 + color_hint | LLM, t=0 | 완료 |
+| `overwrite_colors` | rembg+k-means 또는 VLM hint로 색상 결정 | ✓ (hybrid) | 완료 |
+| `run_verifiers` | schema/vocab/duplicate/required 검증 일괄 | ✓ | TODO: Step 2 |
+| `critic_llm` | 재추출 대상 결정 | LLM, t=0 | TODO: Step 3 |
+| `vlm_extract_targeted` | 특정 슬롯만 재추출 | LLM, t=0 | TODO: Step 3 |
 
 ### 11.5 Super-graph 노출
 
 ```python
-# backend/app/agents/vision/__init__.py
+# api/app/agents/vision/__init__.py
 from .graph import vision_subgraph
 
-__all__ = ["vision_subgraph"]
+async def analyze_outfit(session_id: str, image_bytes: bytes) -> VisionResponse:
+    ...
 ```
 
-Backend는 `vision_subgraph` 를 import해 super-graph의 노드로 추가한다 (`05-backend-spec.md §5.2`).
+Backend는 `analyze_outfit` 을 호출해 Vision Agent를 사용한다 (`05-backend-spec.md §5.2`).
 
 ## 12. 테스트 전략
 
 ### 12.1 골든 셋
-- `tests/fixtures/vision/` — 라벨링된 이미지 20장 + `expected.json`
+- `tests/fixtures/vision/` — 라벨링된 이미지 5장 + `expected.json` (MVP)
 - 카테고리 일치율 ≥ 80% (slot별 category)
 - 색상 RGB 정확도: extract_dominant_rgb 결과가 수동 측정값과 ΔE2000 ≤ 15
 
-### 12.2 단위 테스트
-- 각 Verifier 함수: 정상/위반 케이스 ≥ 5개씩
-- Critic 응답 mock → ReextractPlan 파싱
-- color overwrite: VLM이 잘못된 색상을 반환해도 최종 응답은 OpenCV 값
+### 12.2 단위 테스트 (현재 구현)
 
-### 12.3 워크플로우 테스트
-- **시나리오 A**: 1 step 통과 (verifier 모두 OK)
-- **시나리오 B**: color 불일치 → critic → top 재추출 → 통과 (2 step)
-- **시나리오 C**: 재추출 후에도 위반 → 부분 결과 + warnings (3 step)
-- **시나리오 D**: 사람 미검출 → 즉시 400
-- **시나리오 E**: VLM 환각 (의류 5개 중 1개 가짜) → consistency 위반 → 제거
+`tests/agents/vision/test_graph.py`:
+- **시나리오 A (정상 흐름)**: 해상도 통과 → VLM 추출 → 색상 덮어쓰기 → garments 반환
+- **시나리오 B (해상도 미달)**: 480p 미만 → `state.error` 설정, VLM 미호출
+- **시나리오 C (VLM 실패)**: 2회 연속 예외 → `state.error` 설정
+
+### 12.3 워크플로우 테스트 (Step 2 이후 추가 예정)
+- **시나리오 D**: color 불일치 → critic → top 재추출 → 통과 (2 step)
+- **시나리오 E**: 재추출 후에도 위반 → 부분 결과 + warnings (3 step)
+- **시나리오 F**: VLM 환각 (의류 5개 중 1개 가짜) → consistency 위반 → 제거
 
 ### 12.4 회귀 테스트
-- 동일 입력 5회 호출 시 카테고리 일치 100% (LLM 결정성)
-- RGB 값은 정확히 동일 (OpenCV는 결정적)
+- 동일 입력 5회 호출 시 카테고리 일치 100% (LLM temperature=0)
+- RGB 값은 정확히 동일 (rembg + k-means는 결정적)
 
 ### 12.5 Agentic 동작 검증
 - `agent_meta.steps_taken` 분포 측정 (목표: 1 step 통과 ≥ 70%, 2 step ≥ 25%, 3 step ≤ 5%)
-- Critic 호출 비율 측정
 
 ## 13. 성능 목표
 
 | 지표 | 목표 |
 |---|---|
-| Latency P50 (1 step 통과) | ≤ 2.8s |
-| Latency P95 (3 step) | ≤ 6.5s |
+| Latency P50 (1 step 통과) | ≤ 3.5s (rembg 처리 포함) |
+| Latency P95 (3 step) | ≤ 7.0s |
 | 1 step 통과율 | ≥ 70% |
 | 색상 RGB 정확도 (ΔE) | ≤ 15 (수동 측정 대비) |
-| 카테고리 정확도 (골든 20장) | ≥ 80% |
+| 카테고리 정확도 (골든 5장) | ≥ 80% |
 | Schema Pass Rate (최종) | ≥ 99% (재시도 후) |
 | VLM 평균 호출 수 | ≤ 1.4회 |
 
-## 14. 마일스톤
+## 14. 구현 마일스톤
 
-| 주차 | 산출물 |
-|---|---|
-| 1주차 | Step 0 결정적 도구(validate, pose, face_blur, dominant_rgb) + Step 1 VLM 1차 추출 + 골든 5장 |
-| 2주차 | Verifier 5종 + 색상 overwrite + 골든 20장 통과 |
-| 3주차 | Critic LLM + Targeted re-extract + 워크플로우 테스트 5개 시나리오 + 메트릭 |
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| Step 0 | `validate_image` (해상도·정면 검증) | ✅ 완료 |
+| Step 1 | VLM 1차 추출 + rembg/k-means 색상 덮어쓰기 (hybrid) | ✅ 완료 |
+| Step 2 | Verifier 5종 (vocab, duplicate, color, required, schema) | 🔲 예정 |
+| Step 3 | Critic LLM + Targeted re-extract + 워크플로우 테스트 전체 | 🔲 예정 |
+| 성능 | 골든 5장 통과, latency 측정, agentic 동작 검증 | 🔲 예정 |
 
 ## 15. 다른 역할과의 인터페이스
 
@@ -463,5 +462,6 @@ Backend는 `vision_subgraph` 를 import해 super-graph의 노드로 추가한다
 ## 16. 정직성 노트
 
 - 이 Agent는 **헤비한 Plan-and-Execute 형태가 아니라** "Verify-and-Refine"이다.
-- LLM 호출 1.4회/요청 평균이 목표이며, 비용은 단순 structured output 대비 약 1.5배.
-- 정확도와 결정성을 위해 색상 인식은 LLM에서 **완전히 분리**했다 — 이는 본 Agent의 핵심 설계 결정.
+- VLM 호출 1.4회/요청 평균이 목표이며, 비용은 단순 structured output 대비 약 1.5배.
+- 색상 인식은 원칙적으로 픽셀 분석이 주이지만, 가려진 슬롯에 한해 VLM 의미론적 판단을 fallback으로 사용한다 — 이는 실용적 trade-off.
+- 포즈/얼굴 감지(MediaPipe)는 MVP에서 제외되었으며, 슬롯 영역은 이미지 높이 비율 휴리스틱으로 산출한다.
