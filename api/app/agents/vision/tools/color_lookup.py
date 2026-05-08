@@ -4,6 +4,7 @@ RGB 색상값을 한글 색상 이름으로 변환하는 도구입니다.
 사용 방법:
   rgb_to_korean_name((255, 255, 255))  →  "흰색"
   rgb_to_korean_name((0, 0, 128))      →  "진파랑"
+  korean_name_to_rgb("네이비")         →  (0, 0, 139)
 
 변환 원리:
   미리 정의된 기준 색상 목록과의 유클리드 거리를 계산해서
@@ -19,6 +20,7 @@ _COLOR_TABLE: list[tuple[tuple[int, int, int], str]] = [
     ((245, 245, 245), "오프화이트"),
     ((245, 245, 220), "베이지"),
     ((210, 180, 140), "탄"),
+    ((196, 155, 115), "카멜"),
     ((0, 0, 0), "검정"),
     ((64, 64, 64), "진회색"),
     ((128, 128, 128), "회색"),
@@ -53,6 +55,24 @@ _COLOR_TABLE: list[tuple[tuple[int, int, int], str]] = [
     ((128, 128, 0), "올리브"),
 ]
 
+# VLM이 반환할 수 있는 색상 이름 목록.
+# step1_nodes.py의 Literal 타입과 prompts.py의 스키마 설명에서 공통으로 참조합니다.
+COLOR_NAMES: tuple[str, ...] = tuple(name for _, name in _COLOR_TABLE)
+
+# 색상 이름 → RGB 역방향 조회 딕셔너리 (O(1) 탐색).
+_NAME_TO_RGB: dict[str, tuple[int, int, int]] = {name: rgb for rgb, name in _COLOR_TABLE}
+
+
+def korean_name_to_rgb(name: str) -> tuple[int, int, int]:
+    """
+    한글 색상 이름을 받아 대응하는 참조 RGB 값을 반환합니다.
+    VLM color_hint → PrimaryColor 변환 시 사용합니다.
+
+    color_hint는 Pydantic Literal로 테이블 내 이름만 허용하므로
+    KeyError가 발생하면 데이터 흐름 버그입니다.
+    """
+    return _NAME_TO_RGB[name]
+
 
 def _euclidean_distance(c1: tuple[int, int, int], c2: tuple[int, int, int]) -> float:
     """두 RGB 색상 간의 유클리드 거리를 계산합니다. 거리가 작을수록 색상이 비슷합니다."""
@@ -73,7 +93,7 @@ def rgb_to_korean_name(rgb: tuple[int, int, int]) -> str:
       rgb_to_korean_name((0, 0, 100))  →  "네이비"
       rgb_to_korean_name((200, 200, 200))  →  "연회색"
     """
-    closest_name = "알 수 없음"
+    closest_name = _COLOR_TABLE[0][1]
     min_distance = float("inf")
 
     for ref_rgb, name in _COLOR_TABLE:

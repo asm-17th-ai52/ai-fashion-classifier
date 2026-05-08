@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from ..state import VisionState, Garment, PrimaryColor
 from ..tools.dominant_rgb import extract_dominant_rgb
+from ..tools.color_lookup import COLOR_NAMES, korean_name_to_rgb
 from ..prompts import SYSTEM_PROMPT_EXTRACT_ALL, USER_PROMPT_EXTRACT_ALL
 
 
@@ -36,10 +37,13 @@ from ..prompts import SYSTEM_PROMPT_EXTRACT_ALL, USER_PROMPT_EXTRACT_ALL
 # ──────────────────────────────────────────────
 
 class _GarmentVLMOutput(BaseModel):
-    """VLM이 반환하는 단일 의류 속성. 색상 필드는 제외됩니다."""
+    """VLM이 반환하는 단일 의류 속성."""
     slot: Literal["top", "bottom", "outer", "shoes", "bag", "watch"]
     category: str
     subcategory: str | None = None
+    # VLM이 의미론적으로 판단한 색상 이름. 가려진 의류의 fallback으로 사용됩니다.
+    # COLOR_NAMES 목록만 허용해 테이블 외 이름이 들어오지 않도록 강제합니다.
+    color_hint: Literal[tuple(COLOR_NAMES)] | None = None  # type: ignore[valid-type]
     pattern: Literal["solid", "stripe", "check", "dot", "graphic", "other"]
     estimated_material: (
         Literal["cotton", "wool", "synthetic", "denim", "leather", "knit", "unknown"] | None
@@ -148,6 +152,7 @@ def node_vlm_extract_all(state: VisionState) -> dict:
             slot=g.slot,
             category=g.category,
             subcategory=g.subcategory,
+            color_hint=g.color_hint,  # VLM 색상 힌트: 가려진 슬롯의 fallback으로 사용됩니다.
             pattern=g.pattern,
             estimated_material=g.estimated_material,
             fit=g.fit,
@@ -176,28 +181,49 @@ def node_vlm_extract_all(state: VisionState) -> dict:
 # Step 1-B: 색상 덮어쓰기 노드
 # ──────────────────────────────────────────────
 
+def _is_likely_occluded(slot: str, all_slots: list[str]) -> bool:
+    """
+    해당 슬롯이 다른 의류에 가려져 픽셀 분석이 신뢰할 수 없는지 판정합니다.
+
+    판정 기준:
+      - "top"이 감지됐고 동시에 "outer"도 감지된 경우:
+        상의가 코트/자켓 안에 가려져 있을 가능성이 높습니다.
+    """
+    if slot == "top" and "outer" in all_slots:
+        return True
+    return False
+
+
 def node_overwrite_colors(state: VisionState) -> dict:
     """
-    각 의류 슬롯의 실제 픽셀 색상을 OpenCV k-means로 측정해 garments에 덮어씁니다.
+    각 의류 슬롯의 색상을 결정합니다.
 
-    VLM이 추정한 색상은 신뢰도가 낮으므로 이 단계에서 반드시 교체합니다.
-    슬롯별 이미지 영역은 이미지 높이 비율 휴리스틱으로 추정합니다.
+    가려지지 않은 슬롯: OpenCV k-means로 실제 픽셀 색상을 측정합니다.
+    가려진 슬롯(예: 코트 안의 티셔츠): VLM이 추정한 color_hint를 사용합니다.
 
     업데이트 필드: garments, tool_call_log
     """
     # TODO: slot_bboxes가 있으면 휴리스틱 대신 정확한 bbox를 사용하도록 개선 (spec §5.1)
 
+    all_slots = [g.slot for g in state.garments]
     updated_garments = []
     log_entries = []
 
     for garment in state.garments:
         start = time.time()
 
-        # 슬롯에 해당하는 이미지 영역에서 지배적 색상을 추출합니다.
-        rgb_tuple, color_name = extract_dominant_rgb(state.image, slot=garment.slot)
+        if _is_likely_occluded(garment.slot, all_slots) and garment.color_hint:
+            # 가려진 슬롯: VLM color_hint를 신뢰하고 픽셀 분석을 건너뜁니다.
+            rgb_tuple = korean_name_to_rgb(garment.color_hint)
+            color_name = garment.color_hint
+            source = "vlm_hint"
+        else:
+            # 가려지지 않은 슬롯: 실제 픽셀에서 지배적 색상을 추출합니다.
+            rgb_tuple, color_name = extract_dominant_rgb(state.image, slot=garment.slot)
+            source = "kmeans"
+
         elapsed_ms = int((time.time() - start) * 1000)
 
-        # 측정한 실제 RGB로 garment의 primary_color를 교체합니다.
         updated = garment.model_copy(
             update={"primary_color": PrimaryColor(rgb=list(rgb_tuple), name=color_name)}
         )
@@ -206,6 +232,7 @@ def node_overwrite_colors(state: VisionState) -> dict:
         log_entries.append({
             "tool": "overwrite_colors",
             "slot": garment.slot,
+            "source": source,
             "ms": elapsed_ms,
             "rgb": list(rgb_tuple),
             "name": color_name,
