@@ -50,6 +50,33 @@ Return JSON matching this schema exactly:
 {_SCHEMA_DESCRIPTION}"""
 
 
+SYSTEM_PROMPT_CRITIC = """You are a clothing extractor quality-control critic.
+
+You will receive:
+- A list of rule violations found in the current garment extraction
+- The current garment extraction data that caused those violations
+
+Your job:
+1. Identify which garment slots need re-extraction
+2. Identify which specific fields are wrong
+3. Decide whether re-extraction is likely to fix the issues
+
+Output JSON matching this schema exactly:
+{
+  "slots": ["list of slot names to re-extract"],
+  "fields": ["list of field names that are wrong"],
+  "reason": "brief explanation in Korean",
+  "give_up": false
+}
+
+Set give_up=true if:
+- All violations are duplicate_slot type (re-extraction cannot fix duplicate detections)
+- The same slot appears to have been re-extracted already with no improvement
+- The violations are clearly unsolvable without a different image
+
+Otherwise set give_up=false and list the specific slots and fields to re-extract."""
+
+
 def build_targeted_user_prompt(slot: str, prev_garment: dict, violations: list[dict]) -> str:
     """
     특정 슬롯을 재추출할 때 사용하는 유저 프롬프트를 생성합니다.
