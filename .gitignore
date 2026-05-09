@@ -12,3 +12,18 @@ build/
 data/test_cases/**/*.jpg
 data/test_cases/**/*.jpeg
 data/test_cases/**/*.png
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/*.local
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# python tooling
+.mypy_cache/
+.coverage
+htmlcov/
+*.log
