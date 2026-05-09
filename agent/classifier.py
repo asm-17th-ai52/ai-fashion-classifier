@@ -1,9 +1,10 @@
 import base64
 import json
 from openai import OpenAI
+from dotenv import load_dotenv
 from .rubrics import RUBRICS
 
-client = OpenAI()
+client: OpenAI | None = None
 
 SYSTEM_PROMPT = """You are a fashion appropriateness classifier.
 You will be given an outfit image and a situation.
@@ -38,6 +39,11 @@ def classify(image_base64: str, situation: str) -> dict:
     image_base64: base64 인코딩된 이미지 문자열
     situation: "interview" | "funeral" | "presentation"
     """
+    global client
+    if client is None:
+        load_dotenv()
+        client = OpenAI()
+
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
