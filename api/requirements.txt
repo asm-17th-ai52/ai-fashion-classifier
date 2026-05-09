@@ -21,6 +21,8 @@ Pillow>=10.3.0
 opencv-python-headless>=4.10.0
 mediapipe>=0.10.14
 numpy>=1.26.0
+rembg>=2.0.50
+onnxruntime>=1.17.0
 
 # Environment loading (Vision Agent loads .env at import)
 python-dotenv>=1.0.0

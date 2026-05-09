@@ -57,6 +57,7 @@ class Garment(BaseModel):
     slot: Literal["top", "bottom", "outer", "shoes", "bag", "watch"]
     category: str           # 의류 종류 (예: "티셔츠", "청바지", "스니커즈")
     subcategory: Optional[str] = None  # 세부 종류 (예: "크루넥", "스키니")
+    color_hint: Optional[str] = None  # VLM이 추정한 색상 이름 (픽셀 분석 불가 시 fallback으로 사용)
     primary_color: PrimaryColor = Field(default_factory=PrimaryColor)
     secondary_colors: list[PrimaryColor] = []  # 부수적인 색상 목록 (예: 줄무늬의 다른 색)
     pattern: Literal["solid", "stripe", "check", "dot", "graphic", "other"]  # 패턴 종류
