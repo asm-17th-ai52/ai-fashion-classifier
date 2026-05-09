@@ -8,6 +8,16 @@ Per docs/specs/05-backend-spec.md. Run with::
 """
 from __future__ import annotations
 
+# Repo 루트를 sys.path에 추가해 ``agents.<name>`` 패키지 (08 §3.3 협의 사항)를
+# import 가능하게 한다. agent 코드는 repo 루트 ``agents/`` 에 위치하지만 uvicorn은
+# ``api/``에서 실행되므로 직접 보이지 않는다.
+import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware

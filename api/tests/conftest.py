@@ -15,10 +15,13 @@ import pytest
 from PIL import Image
 
 
-# Make ``api/`` importable as if uvicorn ran from there.
+# Make ``api/`` importable as if uvicorn ran from there, plus the repo root so
+# ``agents.<name>`` packages (per 08-roles-and-handoffs §3.3) resolve in tests.
 API_ROOT = Path(__file__).resolve().parents[1]
-if str(API_ROOT) not in sys.path:
-    sys.path.insert(0, str(API_ROOT))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+for path in (API_ROOT, REPO_ROOT):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 os.environ.setdefault("REQUIRE_PERSON_DETECTION", "false")
 
