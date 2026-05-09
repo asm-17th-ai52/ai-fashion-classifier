@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_interview_casual",
+  "dress_code": {
+    "event_type": "interview",
+    "tier": "tier1",
+    "rag_match_score": 0.95,
+    "expected_formality_range": [70, 95],
+    "expected_categories": {
+      "top": ["shirt", "blouse", "blazer"],
+      "bottom": ["slacks", "skirt"],
+      "outer": ["blazer", "coat"],
+      "shoes": ["dress_shoes", "loafers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "white"],
+      "avoid_tones": ["red", "yellow", "neon"]
+    },
+    "source_doc_ids": ["dresscode_interview_v1"],
+    "extraction_confidence": 0.9
+  },
+  "warnings": []
+}

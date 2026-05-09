@@ -7,7 +7,7 @@
 | 역할 | 인원 | 주 책임 | 단일 책임 모듈 | 명시적 비-책임 |
 |---|---|---|---|---|
 | **AI/Vision Agent** | 1 | 이미지 → 의류 속성 JSON 추출 | `backend/app/agents/vision/` | 점수 계산, 컨텍스트 조회 |
-| **AI/Context Agent** | 1 | 일정/위치 → 날씨·드레스코드 | `backend/app/agents/context/` | LLM 사용, 의류 평가 |
+| **AI/Context Agent** | 1 | 일정 → 드레스코드 | `backend/app/agents/context/` | LLM 사용, 의류 평가 |
 | **AI/Recommendation Agent** | 1 | 점수 산출 + 제안 생성 | `backend/app/agents/recommendation/`, `backend/app/scoring/` | 의류 추출, 외부 API 직접 호출 |
 | **Backend** | 1 | API Gateway / 오케스트레이션 / 전처리 / 캐싱 | `backend/app/api/`, `backend/app/services/preprocess.py` | Agent 내부 로직 |
 | **Frontend** | 1 | UI 전체 | `frontend/` | 점수 계산, Agent 직접 호출 |
@@ -124,8 +124,8 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 
 | 주차 | Vision | Context | Recommendation | Backend | Frontend |
 |---|---|---|---|---|---|
-| **1주** | LangGraph sub-graph 골격 + 결정적 도구 노드(validate/pose/blur/dominant_rgb) + 1차 VLM 노드 + 골든 5장 | LangGraph sub-graph 골격 + Weather 노드 + Tier-1 RAG 노드 + thermal_band 룩업 | LangGraph sub-graph 골격 + Group A,B 9개 체크 노드 + 점수 산출 노드 | LangGraph 셋업 + super-graph 골격(stub sub-graph) + FastAPI 스캐폴드 + 전처리 노드 | 라우팅 + Upload UI |
-| **2주** | Verifier 5종 노드 + Critic LLM 노드 + 색상 overwrite + 분기 함수 + 골든 20장 | Tier-2 ReAct 노드들(plan_query / web_search / fetch_pages / extract_facts / consensus) + 도메인 화이트리스트 + 분기 함수 | Group C,D,E 8개 체크 + blocker cap + simulator 노드 + candidates 노드 | super-graph에 실제 sub-graph 연결 + 캐시 + 병렬 fan-out/fan-in 검증 | Result UI + 체크리스트 시각화 |
+| **1주** | LangGraph sub-graph 골격 + 결정적 도구 노드(validate/pose/blur/dominant_rgb) + 1차 VLM 노드 + 골든 5장 | LangGraph sub-graph 골격 + Tier-1 RAG 노드 | LangGraph sub-graph 골격 + Group A,B 8개 체크 노드 + 점수 산출 노드 | LangGraph 셋업 + super-graph 골격(stub sub-graph) + FastAPI 스캐폴드 + 전처리 노드 | 라우팅 + Upload UI |
+| **2주** | Verifier 5종 노드 + Critic LLM 노드 + 색상 overwrite + 분기 함수 + 골든 20장 | Tier-2 ReAct 노드들(plan_query / web_search / fetch_pages / extract_facts / consensus) + 도메인 화이트리스트 + 분기 함수 | Group C,D 5개 체크 + blocker cap + simulator 노드 + candidates 노드 | super-graph에 실제 sub-graph 연결 + 캐시 + 병렬 fan-out/fan-in 검증 | Result UI + 체크리스트 시각화 |
 | **3주** | 얼굴 블러 통합 + 회귀 테스트 + LangSmith trace 확인 | 결정성 테스트 + 승격 큐 노드 + 통합 + LangSmith trace 확인 | narrate 노드 + safety_filter 분기 + 통합 테스트 | simulate endpoint + 관측성 + E2E + LangGraph checkpoint 활성화 | 시뮬 인터랙션 + Tier-2 출처 패널 + 발표 폴리싱 |
 
 각 주 종료 시점 **인테그레이션 데이**: 금요일 오후, 5인 모두 코드 머지 후 e2e 시나리오 1회 통과.
@@ -147,20 +147,19 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 | 새 enum 값 추가 (event_type 등) | 발의자 | 5인 전원 | - | - |
 | 점수 차원 추가 | rec-owner | rec + backend + frontend | vision/context | - |
 | LLM 모델 교체 | vision-owner / rec-owner | 해당 owner | backend (비용/속도) | 전원 |
-| Weather API 교체 | context-owner | context-owner | backend | 전원 |
 | UI 큰 변경 | frontend-owner | frontend + 발표 담당 | - | 전원 |
 
 ## 7. 통합 테스트 시나리오 (E2E 5개)
 
 3주차 발표 전 모두 통과 필수.
 
-| # | event_type | 날씨 | 의도 | 기대 결과 |
-|---|---|---|---|---|
-| 1 | interview | 6°C, 강수 0.1 | 면접 적정 착장 | overall ≥ 80, suggestion ≤ 1 |
-| 2 | interview | 6°C, 강수 0.1 | 면접에 캐주얼 | overall ≤ 60, swap shoes 제안 |
-| 3 | outdoor_activity | 2°C, 강수 0.7 | 외투 미착용 | precipitation_readiness ≤ 40, add outer 제안 |
-| 4 | office_daily | 25°C, 맑음 | 정상 | overall ≥ 70, suggestion ≤ 2 |
-| 5 | wedding_guest | 18°C, 맑음 | 너무 캐주얼 | dresscode_alignment ≤ 50, swap 제안 |
+| # | event_type | 의도 | 기대 결과 |
+|---|---|---|---|
+| 1 | interview | 면접 적정 착장 | overall ≥ 80, suggestion ≤ 1 |
+| 2 | interview | 면접에 캐주얼 | overall ≤ 60, swap shoes 제안 |
+| 3 | office_daily | 포멀니스 기대치 충족 | overall ≥ 70, suggestion ≤ 2 |
+| 4 | wedding_guest | 너무 캐주얼 | overall ≤ 50 (blocker cap), swap 제안 |
+| 5 | presentation | 드레스코드 완전 불일치 | overall ≤ 40, 복수 제안 |
 
 각 시나리오는 골든 이미지 + 기대 응답 fixture로 저장 (`backend/tests/fixtures/e2e/`).
 
@@ -179,7 +178,6 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 | 리스크 | 컨틴전시 |
 |---|---|
 | VLM이 어휘 위반 빈발 | Vision Agent: 카테고리만 LLM, 색상은 OpenCV로 따로 추출 |
-| Weather API 한도 초과 | Context Agent: 캐시 TTL 늘리고, 5개 도시만 사전 워밍 |
 | 점수 분포가 이상 (모두 80+) | rec-owner: 가중치 재조정, 골든 셋 재라벨 |
 | LLM 비용 초과 | Backend: rate limit 강화, 데모 시 캐시된 시나리오 우선 |
 | 발표 시연 실패 | 사전 녹화한 데모 영상 fallback 준비 |
@@ -188,12 +186,12 @@ docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @back
 
 다음을 모두 만족해야 프로젝트 완료로 본다.
 
-- [ ] 17개 binary 체크 모두 단위 테스트 통과 (pass/fail/N/A 케이스)
+- [ ] 13개 binary 체크 모두 단위 테스트 통과 (pass/fail/N/A 케이스)
 - [ ] 그룹별 pass rate + blocker cap 산출 정합성 테스트 통과
 - [ ] 시뮬레이션 정합성 ≥ 99% (적용 후 expected_delta ±1)
 - [ ] 5개 E2E 시나리오 통과
 - [ ] Schema Pass Rate ≥ 98% (자동 측정)
-- [ ] 동일 입력 5회 호출 시 종합 점수 + 17개 체크 결과 100% 동일
+- [ ] 동일 입력 5회 호출 시 종합 점수 + 13개 체크 결과 100% 동일
 - [ ] 금지 단어 회귀 테스트 통과 (위반 0건)
 - [ ] Latency P95 ≤ 8s
 - [ ] 발표 데모 1회 무사고 시연

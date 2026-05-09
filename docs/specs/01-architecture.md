@@ -36,7 +36,6 @@
                                   ▼
                     ┌─────────────────────────┐
                     │ External Resources       │
-                    │ - Weather API            │
                     │ - Static FAISS index     │
                     │ - Web Search API         │
                     │ - URL fetcher            │
@@ -52,8 +51,7 @@ User → Frontend → Backend
      → Backend: 이미지 검증, 세션 생성
   2. Backend → Vision Agent: analyze_outfit(image)
      → 의류 속성 JSON 반환
-  3. Backend → Context Agent (병렬):
-     - resolve_weather(location, datetime)
+  3. Backend → Context Agent:
      - resolve_dresscode(event_type)
         ├─ Tier-1: Static RAG 검색 (LLM 미사용)
         └─ Tier-2: Live Research Agent (ReAct + 웹검색)
@@ -144,7 +142,6 @@ ai-swm-52/
 │   │   ├── schemas/           # Pydantic 모델 (07-data-contracts 기준)
 │   │   ├── scoring/           # 결정적 점수 계산 모듈
 │   │   └── services/
-│   │       ├── weather.py
 │   │       ├── dresscode_rag_static.py     # Tier-1
 │   │       ├── live_research_agent.py      # Tier-2 ReAct 루프
 │   │       ├── tools/
@@ -177,7 +174,6 @@ ai-swm-52/
 |---|---|---|
 | 이미지 업로드 | 해상도 < 480p, 사람 미검출 | 400 + 재촬영 요청 메시지 |
 | Vision Agent | schema 검증 실패 | 재시도 2회 → 실패 시 502 |
-| Weather API | 4xx/5xx | "기상 데이터 없음" 플래그 + 날씨 차원 점수 제외 |
 | Dress Code Tier-1 | 매칭 임계 미만 | Tier-2 자동 트리거 (조건 충족 시) |
 | Dress Code Tier-2 | 도메인 화이트리스트 위반 / 단일 소스 / extraction confidence < 0.5 | "general" 카테고리 fallback + warning |
 | Dress Code Tier-2 | latency > 12s 또는 글로벌 일일 한도 초과 | 부분 결과 또는 fallback + `tier2_budget_exceeded` warning |
@@ -192,7 +188,6 @@ ai-swm-52/
 
 - 업로드 이미지: 처리 후 **24시간 내 삭제** (감사 로그만 보관).
 - 얼굴 영역 감지 시 자동 블러 처리 후 VLM에 전달 (얼굴 분석 차단).
-- 위치 정보: 좌표가 아닌 도시 단위(`city_code`)로만 수신.
 - LLM 프롬프트에 PII 미포함.
 
 ## 7. 비-목표 (시스템 차원)

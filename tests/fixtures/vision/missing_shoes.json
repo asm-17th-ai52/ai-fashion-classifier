@@ -1,0 +1,44 @@
+{
+  "session_id": "sess_missing_shoes",
+  "person_detected": true,
+  "image_quality": {
+    "resolution_ok": true,
+    "frontal": true,
+    "occlusion_ratio": 0.12
+  },
+  "garments": [
+    {
+      "slot": "top",
+      "category": "shirt",
+      "subcategory": "button_down",
+      "primary_color": {
+        "rgb": [180, 180, 180],
+        "name": "gray"
+      },
+      "secondary_colors": [],
+      "pattern": "solid",
+      "estimated_material": "cotton",
+      "fit": "regular",
+      "sleeve_length": "long",
+      "formality_label": "business_formal",
+      "confidence": 0.91
+    },
+    {
+      "slot": "bottom",
+      "category": "slacks",
+      "subcategory": "straight",
+      "primary_color": {
+        "rgb": [75, 75, 75],
+        "name": "gray"
+      },
+      "secondary_colors": [],
+      "pattern": "solid",
+      "estimated_material": "wool",
+      "fit": "regular",
+      "sleeve_length": "n/a",
+      "formality_label": "business_formal",
+      "confidence": 0.9
+    }
+  ],
+  "warnings": ["shoes_not_visible"]
+}

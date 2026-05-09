@@ -1,29 +1,35 @@
-# Vision Agent 핵심 의존성
+# Backend (FastAPI + LangGraph orchestration)
+# Per docs/specs/05-backend-spec.md §3
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+python-multipart>=0.0.9
+httpx>=0.27.0
+
+# Orchestration
 langgraph>=0.2.0
+langchain-core>=0.2.0
+
+# LLM clients (Vision/Recommendation Agents use these via their sub-graphs)
+openai>=1.30.0
 langchain-google-genai>=2.0.0
 google-generativeai>=0.8.0
 
-# 이미지 처리
-opencv-python>=4.9.0
-Pillow>=10.0.0
-numpy>=1.24.0
-
-# 배경 제거 (의류 색상 추출 정확도 향상)
+# Image preprocessing (Backend-owned)
+Pillow>=10.3.0
+opencv-python-headless>=4.10.0
+mediapipe>=0.10.14
+numpy>=1.26.0
 rembg>=2.0.50
 onnxruntime>=1.17.0
 
-# 스키마 및 유효성 검사
-pydantic>=2.0.0
-
-# 환경변수 로드
-# TODO: .env 파일 생성 후 GOOGLE_API_KEY 설정 필요
+# Environment loading (Vision Agent loads .env at import)
 python-dotenv>=1.0.0
 
-# API 서버
-fastapi>=0.110.0
-uvicorn>=0.27.0
+# Observability
+structlog>=24.1.0
 
-# 테스트
-pytest>=8.0.0
+# Tests
+pytest>=8.2.0
 pytest-asyncio>=0.23.0
-httpx>=0.27.0
