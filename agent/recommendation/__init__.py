@@ -11,6 +11,7 @@ from .schemas import (
     Suggestion,
     VisionResponse,
 )
+from .narrator import Narration, OpenAINarratorClient
 from .service import build_recommendation_response
 from .state import RecommendationState
 
