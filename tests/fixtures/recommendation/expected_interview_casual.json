@@ -109,7 +109,7 @@
       "label": "명도 다양성이 적정 범위",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["value_std=25", "expected_value_std_range=[10, 60]"],
+      "evidence_facts": ["value_std=27", "expected_value_std_range=[10, 60]"],
       "is_blocker": false
     },
     {
