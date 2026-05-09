@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 from .checks import FORMALITY_SCORE
 from .schemas import (
     Action,
@@ -14,6 +12,7 @@ from .schemas import (
     VisionResponse,
 )
 from .scoring import calculate_score
+from .simulator import simulate_action
 
 
 SLOT_LABELS = {
@@ -115,18 +114,24 @@ def _build_candidate(
     if action is None:
         return None
 
-    fixed_ids = _fixed_check_ids_for_action(outfit, context, checks, action)
+    _, simulated_checks, simulated_score = simulate_action(outfit, context, action)
+    if _introduces_regression(checks, simulated_checks):
+        return None
+
+    fixed_ids = _fixed_check_ids(checks, simulated_checks)
     if failed_check.id not in fixed_ids:
-        fixed_ids.append(failed_check.id)
-    fixed_ids = _ordered_failed_ids(checks, fixed_ids)
-    simulated_score = calculate_score(_simulate_fixed_checks(checks, fixed_ids))
+        return None
+
+    expected_delta = max(0, simulated_score.overall - current_overall)
+    if expected_delta < 2:
+        return None
 
     return Suggestion(
         id=f"candidate_{failed_check.id}",
         fixes_check_ids=fixed_ids,
         action=action,
         rationale_facts=_rationale_facts(outfit, context, checks, action, fixed_ids),
-        expected_overall_delta=max(0, simulated_score.overall - current_overall),
+        expected_overall_delta=expected_delta,
         removes_blocker=any(_check_by_id(checks, check_id).is_blocker for check_id in fixed_ids),
         user_facing_text=_user_facing_text(outfit, action, fixed_ids),
     )
@@ -171,55 +176,6 @@ def _action_for_failed_check(
         return Action(type=ActionType.RECOLOR, target_slot="top", to=_preferred_tone(context))
 
     return None
-
-
-def _fixed_check_ids_for_action(
-    outfit: VisionResponse,
-    context: ContextResponse,
-    checks: list[CheckResult],
-    action: Action,
-) -> list[str]:
-    failed_ids = [check.id for check in checks if check.result == CheckStatus.FAIL]
-    fixed = []
-    for check_id in failed_ids:
-        if _action_can_fix_check(outfit, context, action, check_id):
-            fixed.append(check_id)
-    return fixed
-
-
-def _action_can_fix_check(
-    outfit: VisionResponse,
-    context: ContextResponse,
-    action: Action,
-    check_id: str,
-) -> bool:
-    if action.type == ActionType.ADD and action.target_slot == "shoes":
-        return check_id == "B3"
-
-    if action.type == ActionType.SWAP and action.target_slot == "shoes":
-        if check_id == "A3":
-            return True
-        if check_id == "A4":
-            avg = _simulated_formality_avg(outfit, action)
-            low, high = context.dress_code.expected_formality_range
-            return low <= avg <= high
-        if check_id == "B1":
-            return _simulated_formality_std(outfit, action) <= 15
-
-    if action.type == ActionType.SWAP and check_id in {"A1", "A2"}:
-        return True
-
-    return action.type == ActionType.RECOLOR and check_id in {"A5", "C1", "C2", "C3"}
-
-
-def _simulate_fixed_checks(checks: list[CheckResult], fixed_ids: list[str]) -> list[CheckResult]:
-    simulated = deepcopy(checks)
-    fixed = set(fixed_ids)
-    for check in simulated:
-        if check.id in fixed:
-            check.result = CheckStatus.PASS
-            check.applicable = True
-    return simulated
 
 
 def _dedupe_suggestions(suggestions: list[Suggestion]) -> list[Suggestion]:
@@ -410,9 +366,29 @@ def _check_by_id(checks: list[CheckResult], check_id: str) -> CheckResult:
     return next(check for check in checks if check.id == check_id)
 
 
-def _ordered_failed_ids(checks: list[CheckResult], check_ids: list[str]) -> list[str]:
-    wanted = set(check_ids)
-    return [check.id for check in checks if check.id in wanted and check.result == CheckStatus.FAIL]
+def _fixed_check_ids(
+    checks: list[CheckResult],
+    simulated_checks: list[CheckResult],
+) -> list[str]:
+    simulated_by_id = {check.id: check for check in simulated_checks}
+    return [
+        check.id
+        for check in checks
+        if check.result == CheckStatus.FAIL
+        and simulated_by_id[check.id].result == CheckStatus.PASS
+    ]
+
+
+def _introduces_regression(
+    checks: list[CheckResult],
+    simulated_checks: list[CheckResult],
+) -> bool:
+    simulated_by_id = {check.id: check for check in simulated_checks}
+    return any(
+        check.result == CheckStatus.PASS
+        and simulated_by_id[check.id].result == CheckStatus.FAIL
+        for check in checks
+    )
 
 
 def _unique(values: list[str]) -> list[str]:
