@@ -14,9 +14,9 @@ import pytest
 from unittest.mock import patch
 from PIL import Image
 
-from app.agents.vision.tools.validate_image import validate_image, MIN_SHORT_SIDE
-from app.agents.vision.tools.dominant_rgb import extract_dominant_rgb
-from app.agents.vision.tools.color_lookup import rgb_to_korean_name
+from agents.vision.tools.validate_image import validate_image, MIN_SHORT_SIDE
+from agents.vision.tools.dominant_rgb import extract_dominant_rgb
+from agents.vision.tools.color_lookup import rgb_to_korean_name
 
 
 def _noop_rembg(image_bytes: bytes) -> bytes:
@@ -97,7 +97,7 @@ class TestExtractDominantRgb:
     def test_단색_이미지_정확한_색상_추출(self):
         """단색 이미지에서 해당 색상의 RGB가 가까운 값으로 추출되어야 합니다."""
         image = _make_image_bytes(640, 640, color=(255, 0, 0))
-        with patch("app.agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
+        with patch("agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
             rgb, name = extract_dominant_rgb(image)
         assert rgb[0] > 200, "R 채널이 충분히 커야 합니다"
         assert rgb[1] < 50,  "G 채널이 충분히 작아야 합니다"
@@ -106,21 +106,21 @@ class TestExtractDominantRgb:
     def test_검정_이미지_색상명_반환(self):
         """검정 이미지에서 '검정' 또는 유사한 색상명이 반환되어야 합니다."""
         image = _make_image_bytes(640, 640, color=(0, 0, 0))
-        with patch("app.agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
+        with patch("agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
             rgb, name = extract_dominant_rgb(image)
         assert name == "검정"
 
     def test_흰색_이미지_색상명_반환(self):
         """흰색 이미지에서 '흰색' 또는 유사한 색상명이 반환되어야 합니다."""
         image = _make_image_bytes(640, 640, color=(255, 255, 255))
-        with patch("app.agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
+        with patch("agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
             rgb, name = extract_dominant_rgb(image)
         assert name == "흰색"
 
     def test_슬롯_지정_시_정상_동작(self):
         """slot을 지정해도 결과가 반환되어야 합니다."""
         image = _make_image_bytes(640, 1200, color=(0, 0, 128))
-        with patch("app.agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
+        with patch("agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
             rgb, name = extract_dominant_rgb(image, slot="top")
         assert len(rgb) == 3
         assert isinstance(name, str)
@@ -128,7 +128,7 @@ class TestExtractDominantRgb:
     def test_반환_타입_확인(self):
         """반환값이 ((int, int, int), str) 형식이어야 합니다."""
         image = _make_image_bytes(640, 640, color=(128, 64, 32))
-        with patch("app.agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
+        with patch("agents.vision.tools.dominant_rgb.rembg_remove", _noop_rembg):
             rgb, name = extract_dominant_rgb(image)
         assert len(rgb) == 3
         assert all(isinstance(v, int) for v in rgb)

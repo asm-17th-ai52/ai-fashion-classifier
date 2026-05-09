@@ -13,12 +13,12 @@ import pytest
 from unittest.mock import patch, MagicMock
 from PIL import Image
 
-from app.agents.vision.tools.clip_image import clip_image_by_slot
-from app.agents.vision.state import (
+from agents.vision.tools.clip_image import clip_image_by_slot
+from agents.vision.state import (
     VisionState, Garment, PrimaryColor, Violation, ReextractPlan,
 )
-from app.agents.vision.nodes.step3_nodes import node_critic_llm, node_vlm_extract_targeted
-from app.agents.vision.graph import build_vision_graph
+from agents.vision.nodes.step3_nodes import node_critic_llm, node_vlm_extract_targeted
+from agents.vision.graph import build_vision_graph
 
 
 # ──────────────────────────────────────────────
@@ -121,7 +121,7 @@ class TestNodeCriticLlm:
         state = _make_state_with_violations(violations)
         plan_json = json.dumps({"slots": ["top"], "fields": ["pattern"], "reason": "패턴 오류", "give_up": False})
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(plan_json)
             result = node_critic_llm(state)
 
@@ -136,7 +136,7 @@ class TestNodeCriticLlm:
         state = _make_state_with_violations(violations)
         plan_json = json.dumps({"slots": [], "fields": [], "reason": "중복 해결 불가", "give_up": True})
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(plan_json)
             result = node_critic_llm(state)
 
@@ -148,7 +148,7 @@ class TestNodeCriticLlm:
         violations = [Violation(type="vocab", slot="top")]
         state = _make_state_with_violations(violations)
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client("", side_effect=Exception("API 오류"))
             result = node_critic_llm(state)
 
@@ -161,7 +161,7 @@ class TestNodeCriticLlm:
         state = _make_state_with_violations(violations)
         plan_json = json.dumps({"slots": ["top"], "fields": ["pattern"], "reason": "오류", "give_up": False})
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(plan_json)
             result = node_critic_llm(state)
 
@@ -181,7 +181,7 @@ class TestNodeCriticLlm:
         )
         plan_json = json.dumps({"slots": [], "fields": [], "reason": "포기", "give_up": True})
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(plan_json)
             result = node_critic_llm(state)
 
@@ -219,7 +219,7 @@ class TestNodeVlmExtractTargeted:
         """target 슬롯의 garment가 VLM 재추출 결과로 교체되어야 합니다."""
         state = self._make_state_with_plan(["top"])
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json.dumps(self._VALID_GARMENT))
             result = node_vlm_extract_targeted(state)
 
@@ -231,7 +231,7 @@ class TestNodeVlmExtractTargeted:
         """target에 포함되지 않은 슬롯은 원본 garment가 유지되어야 합니다."""
         state = self._make_state_with_plan(["top"])
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json.dumps(self._VALID_GARMENT))
             result = node_vlm_extract_targeted(state)
 
@@ -242,7 +242,7 @@ class TestNodeVlmExtractTargeted:
         """재추출 후 violations가 빈 목록으로 초기화되어야 합니다."""
         state = self._make_state_with_plan(["top"])
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json.dumps(self._VALID_GARMENT))
             result = node_vlm_extract_targeted(state)
 
@@ -253,7 +253,7 @@ class TestNodeVlmExtractTargeted:
         state = self._make_state_with_plan(["top"])
         initial_steps = state.steps_taken
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json.dumps(self._VALID_GARMENT))
             result = node_vlm_extract_targeted(state)
 
@@ -263,7 +263,7 @@ class TestNodeVlmExtractTargeted:
         """재추출된 garment의 primary_color는 _pending으로 초기화되어야 합니다."""
         state = self._make_state_with_plan(["top"])
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json.dumps(self._VALID_GARMENT))
             result = node_vlm_extract_targeted(state)
 
@@ -284,7 +284,7 @@ class TestNodeVlmExtractTargeted:
         """VLM 호출이 실패하면 해당 슬롯의 원본 garment를 유지해야 합니다."""
         state = self._make_state_with_plan(["top"])
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client("", side_effect=Exception("API 오류"))
             result = node_vlm_extract_targeted(state)
 
@@ -295,7 +295,7 @@ class TestNodeVlmExtractTargeted:
         """재추출 후 garments 순서가 원본과 동일해야 합니다."""
         state = self._make_state_with_plan(["top"])
 
-        with patch("app.agents.vision.nodes.step3_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step3_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json.dumps(self._VALID_GARMENT))
             result = node_vlm_extract_targeted(state)
 
@@ -334,7 +334,7 @@ class TestScenarioE_CriticGiveUp통합:
         # verify_vocabulary가 첫 번째 실행에서만 violation을 반환하도록 패치합니다.
         call_index = [0]
         original_verify = __import__(
-            "app.agents.vision.nodes.step2_nodes", fromlist=["verify_vocabulary"]
+            "agents.vision.nodes.step2_nodes", fromlist=["verify_vocabulary"]
         ).verify_vocabulary
 
         def patched_verify_vocabulary(state):
@@ -343,9 +343,9 @@ class TestScenarioE_CriticGiveUp통합:
                 return [Violation(type="vocab", slot="top", detail="테스트 위반")]
             return []
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client", return_value=mock_vlm_client), \
-             patch("app.agents.vision.nodes.step3_nodes._build_client", return_value=mock_critic_client), \
-             patch("app.agents.vision.nodes.step2_nodes.verify_vocabulary", patched_verify_vocabulary):
+        with patch("agents.vision.nodes.step1_nodes._build_client", return_value=mock_vlm_client), \
+             patch("agents.vision.nodes.step3_nodes._build_client", return_value=mock_critic_client), \
+             patch("agents.vision.nodes.step2_nodes.verify_vocabulary", patched_verify_vocabulary):
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-e01", image=image).model_dump())
 
@@ -366,11 +366,11 @@ class TestScenarioE_CriticGiveUp통합:
                 return [Violation(type="vocab", slot="top", detail="테스트")]
             return []
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client",
+        with patch("agents.vision.nodes.step1_nodes._build_client",
                    return_value=_make_mock_client(_MOCK_VLM_JSON)), \
-             patch("app.agents.vision.nodes.step3_nodes._build_client",
+             patch("agents.vision.nodes.step3_nodes._build_client",
                    return_value=_make_mock_client(give_up_plan_json)), \
-             patch("app.agents.vision.nodes.step2_nodes.verify_vocabulary", patched_verify_vocabulary):
+             patch("agents.vision.nodes.step2_nodes.verify_vocabulary", patched_verify_vocabulary):
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-e02", image=image).model_dump())
 
@@ -397,11 +397,11 @@ class TestScenarioF_MaxSteps통합:
         def always_violations(state):
             return [Violation(type="vocab", slot="top", detail="지속 위반")]
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client",
+        with patch("agents.vision.nodes.step1_nodes._build_client",
                    return_value=_make_mock_client(_MOCK_VLM_JSON)), \
-             patch("app.agents.vision.nodes.step3_nodes._build_client",
+             patch("agents.vision.nodes.step3_nodes._build_client",
                    return_value=_make_mock_client(reextract_plan_json if True else targeted_garment_json)), \
-             patch("app.agents.vision.nodes.step2_nodes.verify_vocabulary", always_violations):
+             patch("agents.vision.nodes.step2_nodes.verify_vocabulary", always_violations):
 
             # 모의 클라이언트가 critic과 targeted 모두 처리하도록 side_effect 구성
             call_count = [0]
@@ -419,7 +419,7 @@ class TestScenarioF_MaxSteps통합:
 
             mock_step3_client.models.generate_content.side_effect = step3_generate
 
-            with patch("app.agents.vision.nodes.step3_nodes._build_client",
+            with patch("agents.vision.nodes.step3_nodes._build_client",
                        return_value=mock_step3_client):
                 graph = build_vision_graph()
                 result = graph.invoke(VisionState(session_id="test-f01", image=image).model_dump())

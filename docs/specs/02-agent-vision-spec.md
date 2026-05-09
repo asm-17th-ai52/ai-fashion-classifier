@@ -80,7 +80,7 @@ class VisionRequest(BaseModel):
 | `verify_color_label_consistency(garment)` | 단일 garment | RGB ↔ name 매칭 일치 여부 | color_lookup 테이블 |
 | `verify_no_duplicate_slot(garments)` | 의류 리스트 | 슬롯 중복 여부 | 단순 카운트 |
 | `verify_required_slots(garments)` | 의류 리스트 | 누락 슬롯 목록 | (`top`, `bottom`, `shoes` 기본 필수) |
-| `clip_image_by_bbox(image, bbox)` | 이미지 + 영역 | 잘린 이미지 | Pillow |
+| `clip_image_by_slot(image_bytes, slot, padding)` | 이미지 바이트 + 슬롯명 + 패딩 비율 | 잘린 이미지 바이트 | Pillow |
 
 **`extract_dominant_rgb` 상세:**
 - rembg로 배경(벽, 가구 등) 제거 후 사람 픽셀만 남긴다.
@@ -327,29 +327,44 @@ def build_vision_graph():
     g = StateGraph(VisionState)
 
     # 결정적 도구 노드
-    g.add_node("validate_image", node_validate_image)
-    g.add_node("overwrite_colors", node_overwrite_colors)
+    g.add_node("validate_image",       node_validate_image)
+    g.add_node("overwrite_colors",     node_overwrite_colors)
+    g.add_node("run_verifiers",        node_run_verifiers)
 
     # LLM 노드
-    g.add_node("vlm_extract_all", node_vlm_extract_all)
-    g.add_node("vlm_extract_targeted", node_vlm_extract_targeted)  # TODO: Step 3
-    g.add_node("critic_llm", node_critic_llm)                      # TODO: Step 3
-
-    # Verifier 노드
-    g.add_node("run_verifiers", node_run_verifiers)                 # TODO: Step 2
+    g.add_node("vlm_extract_all",      node_vlm_extract_all)
+    g.add_node("vlm_extract_targeted", node_vlm_extract_targeted)
+    g.add_node("critic_llm",           node_critic_llm)
 
     g.set_entry_point("validate_image")
 
-    # Step 0 → Step 1
+    # Step 0: 이미지 검증 결과에 따라 분기
     g.add_conditional_edges(
         "validate_image",
         _route_after_validate,
         {"ok": "vlm_extract_all", "fail": END}
     )
 
-    # Step 1 → 색상 덮어쓰기 → (Step 2 이후 추가 예정)
-    g.add_edge("vlm_extract_all", "overwrite_colors")
-    g.add_edge("overwrite_colors", END)   # Step 2 구현 후 "run_verifiers"로 변경
+    # Step 1: VLM 추출 → 색상 덮어쓰기 → Verifier
+    g.add_edge("vlm_extract_all",  "overwrite_colors")
+    g.add_edge("overwrite_colors", "run_verifiers")
+
+    # Step 2: Verifier 결과에 따라 분기
+    g.add_conditional_edges(
+        "run_verifiers",
+        _route_after_verify,
+        {"done": END, "exhausted": END, "critic": "critic_llm"}
+    )
+
+    # Step 3: Critic → give_up 또는 재추출
+    g.add_conditional_edges(
+        "critic_llm",
+        _route_after_critic,
+        {"give_up": END, "reextract": "vlm_extract_targeted"}
+    )
+
+    # Step 3 → Step 1 사이클: 재추출 후 색상 덮어쓰기 → 재검증
+    g.add_edge("vlm_extract_targeted", "overwrite_colors")
 
     return g.compile()
 
@@ -389,9 +404,9 @@ def decide_after_critic(state: VisionState) -> str:
 | `validate_image` | 해상도 검증, person_detected | ✓ | 완료 |
 | `vlm_extract_all` | 1차 의류 속성 추출 + color_hint | LLM, t=0 | 완료 |
 | `overwrite_colors` | rembg+k-means 또는 VLM hint로 색상 결정 | ✓ (hybrid) | 완료 |
-| `run_verifiers` | schema/vocab/duplicate/required 검증 일괄 | ✓ | TODO: Step 2 |
-| `critic_llm` | 재추출 대상 결정 | LLM, t=0 | TODO: Step 3 |
-| `vlm_extract_targeted` | 특정 슬롯만 재추출 | LLM, t=0 | TODO: Step 3 |
+| `run_verifiers` | schema/vocab/duplicate/required 검증 일괄 | ✓ | 완료 |
+| `critic_llm` | 재추출 대상 결정 | LLM, t=0 | 완료 |
+| `vlm_extract_targeted` | 특정 슬롯만 재추출 | LLM, t=0 | 완료 |
 
 ### 11.5 Super-graph 노출
 
