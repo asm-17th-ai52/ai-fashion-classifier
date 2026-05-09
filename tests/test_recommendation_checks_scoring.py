@@ -31,7 +31,12 @@ def test_recommendation_checks_and_score_match_expected_fixture(scenario: str):
     assert response.score.model_dump(mode="json") == expected["score"]
     assert response.blockers_failed == expected["blockers_failed"]
     assert [check.model_dump(mode="json") for check in response.checks] == expected["checks"]
-    assert response.suggestions == []
+    actual_suggestions = [
+        suggestion.model_dump(mode="json", by_alias=True, exclude_none=True)
+        for suggestion in response.suggestions
+    ]
+    assert actual_suggestions == expected["suggestions"]
+    assert response.explanation == expected["explanation"]
 
 
 def test_blocker_cap_limits_overall_to_50():
