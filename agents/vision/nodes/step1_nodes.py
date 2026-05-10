@@ -61,7 +61,7 @@ class _VLMExtractionOutput(BaseModel):
     garments: list[_GarmentVLMOutput]
 
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 
 def _build_client() -> genai.Client:
