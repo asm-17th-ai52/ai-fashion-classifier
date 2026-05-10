@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from agent.recommendation import ContextResponse, VisionResponse, build_recommendation_response
-from agent.recommendation.checks import evaluate_checks
-from agent.recommendation.scoring import calculate_score
-from agent.recommendation.simulator import apply_action, simulate_action
+from agents.recommendation import ContextResponse, VisionResponse, build_recommendation_response
+from agents.recommendation.checks import evaluate_checks
+from agents.recommendation.scoring import calculate_score
+from agents.recommendation.simulator import apply_action, simulate_action
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
