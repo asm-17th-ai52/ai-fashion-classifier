@@ -1,22 +1,24 @@
 """
 Vision Agent end-to-end 테스트 스크립트.
 
-사용법:
-  python3 run_test.py                                     # 기본 로컬 이미지
-  python3 run_test.py ../data/test_cases/다른이미지.jpg   # 로컬 파일 경로
-  python3 run_test.py https://example.com/outfit.jpg     # 웹 이미지 URL
+사용법 (repo root 기준):
+  python agents/run_test.py                                     # 기본 로컬 이미지
+  python agents/run_test.py data/test_cases/다른이미지.jpg       # 로컬 파일 경로
+  python agents/run_test.py https://example.com/outfit.jpg     # 웹 이미지 URL
 """
 import asyncio
 import sys
+from pathlib import Path
 
-sys.path.insert(0, ".")
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from dotenv import load_dotenv
-load_dotenv("../.env", override=True)
+load_dotenv(".env", override=True)
 
 import httpx
-from app.agents.vision import analyze_outfit
+from agents.vision import analyze_outfit
 
-DEFAULT_IMAGE = "../data/test_cases/test_casual.jpg"
+DEFAULT_IMAGE = "data/test_cases/test_casual.jpg"
 SOURCE = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_IMAGE
 
 

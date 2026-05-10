@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from agent.recommendation import (
+from agents.recommendation import (
     RecommendationRequest,
     RecommendationResponse,
     Score,

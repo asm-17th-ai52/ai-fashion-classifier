@@ -17,8 +17,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from agent.recommendation import recommendation_subgraph  # type: ignore[import-not-found]
-from agent.recommendation.schemas import (  # type: ignore[import-not-found]
+from agents.recommendation import recommendation_subgraph  # type: ignore[import-not-found]
+from agents.recommendation.schemas import (  # type: ignore[import-not-found]
     ContextResponse as AgentContextResponse,
     VisionResponse as AgentVisionResponse,
 )

@@ -63,15 +63,14 @@
 ### 3.3 코드 소유권 (CODEOWNERS)
 
 > **경로 반영 메모 (2026-05-10)**: 초기 spec은 모든 agent 코드를
-> `backend/app/agents/<name>/` 한 위치에 두기로 협의했으나, 머지된 PR들에서
-> Vision은 ``api/app/agents/vision/``로, Recommendation은 ``agent/recommendation/``
-> (단수)로 들어갔다. 백엔드 셀렉터(``app.agents_stub.get_subgraphs``)는 두 경로
-> 모두를 직접 import하도록 갱신됐다. 추후 일관 정리(`agents/` 통합 등)가 합의되면
-> 셀렉터 한 곳만 다시 수정하면 된다.
+> `backend/app/agents/<name>/` 한 위치에 두기로 협의했으나, repo 루트의
+> `agents/` 디렉토리로 통합됐다. Vision은 `agents/vision/`, Recommendation은
+> `agents/recommendation/`에 위치한다. 백엔드 셀렉터(`app.agents_stub.get_subgraphs`)는
+> 두 패키지를 `agents.*`로 import한다.
 
 ```
-api/app/agents/vision/             @vision-owner
-agent/recommendation/              @rec-owner
+agents/vision/                     @vision-owner
+agents/recommendation/             @rec-owner
 api/app/agents_stub/               @backend-owner
 api/app/api/                       @backend-owner
 api/app/services/                  @backend-owner

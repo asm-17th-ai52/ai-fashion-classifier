@@ -5,8 +5,8 @@ Step 2 Verifier 단위 테스트.
 VLM 호출 없이 순수하게 결정적 로직만 테스트합니다.
 """
 import pytest
-from app.agents.vision.state import VisionState, Garment, PrimaryColor
-from app.agents.vision.nodes.step2_nodes import (
+from agents.vision.state import VisionState, Garment, PrimaryColor
+from agents.vision.nodes.step2_nodes import (
     verify_vocabulary,
     verify_no_duplicate_slot,
     verify_color_label_consistency,

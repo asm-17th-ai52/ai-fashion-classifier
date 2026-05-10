@@ -26,7 +26,7 @@ from app.agents_stub.vision import vision_subgraph_stub
 # ---------------------------------------------------------------------------
 def _vision_real_importable() -> bool:
     try:
-        importlib.import_module("app.agents.vision")
+        importlib.import_module("agents.vision")
         return True
     except Exception:
         return False
@@ -34,7 +34,7 @@ def _vision_real_importable() -> bool:
 
 def _recommendation_real_importable() -> bool:
     try:
-        importlib.import_module("agent.recommendation")
+        importlib.import_module("agents.recommendation")
         return True
     except Exception:
         return False
@@ -42,7 +42,7 @@ def _recommendation_real_importable() -> bool:
 
 def test_real_vision_routes_through_adapter_when_available() -> None:
     if not _vision_real_importable():
-        pytest.skip("app.agents.vision not importable (likely missing google-generativeai)")
+        pytest.skip("agents.vision not importable (likely missing google-generativeai)")
     from app.agents_stub.vision_adapter import vision_adapter
 
     assert get_subgraphs()["vision"] is vision_adapter
@@ -50,7 +50,7 @@ def test_real_vision_routes_through_adapter_when_available() -> None:
 
 def test_real_recommendation_routes_through_adapter_when_available() -> None:
     if not _recommendation_real_importable():
-        pytest.skip("agent.recommendation not importable")
+        pytest.skip("agents.recommendation not importable")
     from app.agents_stub.recommendation_adapter import recommendation_adapter
 
     assert get_subgraphs()["recommendation"] is recommendation_adapter
@@ -70,7 +70,7 @@ def test_vision_falls_back_to_stub_when_import_raises(monkeypatch) -> None:
     real_import = importlib.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "app.agents.vision":
+        if name == "agents.vision":
             raise ImportError("simulated broken vision agent")
         return real_import(name, globals, locals, fromlist, level)
 
@@ -85,7 +85,7 @@ def test_recommendation_falls_back_to_stub_when_import_raises(monkeypatch) -> No
     real_import = importlib.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "agent.recommendation":
+        if name == "agents.recommendation":
             raise ImportError("simulated broken recommendation agent")
         return real_import(name, globals, locals, fromlist, level)
 
