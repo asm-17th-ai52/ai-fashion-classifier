@@ -8,6 +8,9 @@ Vision Agent end-to-end 테스트 스크립트.
 """
 import asyncio
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 load_dotenv(".env", override=True)
