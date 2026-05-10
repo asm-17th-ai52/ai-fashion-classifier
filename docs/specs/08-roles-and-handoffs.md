@@ -61,6 +61,9 @@
 | Frontend | MSW(Mock Service Worker) 로 Backend mock |
 
 ### 3.3 코드 소유권 (CODEOWNERS)
+
+> **[협의 필요]** 아래 경로는 `backend/` 루트 기준으로 작성되어 있으나, Backend 스캐폴드(PR #3)에서 `api/` 루트로 구현되었습니다. 전원 검토 후 실제 디렉토리 구조에 맞게 업데이트해야 합니다.
+
 ```
 backend/app/agents/vision/         @vision-owner
 backend/app/agents/context/        @context-owner

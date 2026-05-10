@@ -14,8 +14,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from PIL import Image
 
-from app.agents.vision.graph import build_vision_graph
-from app.agents.vision.state import VisionState
+from agents.vision.graph import build_vision_graph
+from agents.vision.state import VisionState
 
 
 # ──────────────────────────────────────────────
@@ -88,7 +88,7 @@ class TestScenarioA_정상흐름:
         """
         image = _make_image_bytes(640, 960)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client()
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-001", image=image).model_dump())
@@ -104,7 +104,7 @@ class TestScenarioA_정상흐름:
         """
         image = _make_image_bytes(640, 960)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client()
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-002", image=image).model_dump())
@@ -119,7 +119,7 @@ class TestScenarioA_정상흐름:
         image = _make_image_bytes(640, 960)
         single_garment_json = json.dumps({"garments": [_MOCK_VLM_GARMENTS[0]]})
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json_text=single_garment_json)
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-003", image=image).model_dump())
@@ -152,7 +152,7 @@ class TestScenarioB_해상도미달:
         """해상도 검증 실패 시 VLM이 호출되면 안 됩니다."""
         image = _make_image_bytes(300, 300)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             graph = build_vision_graph()
             graph.invoke(VisionState(session_id="test-005", image=image).model_dump())
             mock_build.assert_not_called()
@@ -168,7 +168,7 @@ class TestScenarioC_VLM실패:
         """VLM 호출이 2회 모두 실패하면 state.error가 설정되어야 합니다."""
         image = _make_image_bytes(640, 960)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(side_effect=Exception("API 오류"))
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-006", image=image).model_dump())
@@ -187,7 +187,7 @@ class TestScenarioD_Verifier통합:
         """정상 흐름에서 Verifier를 통과하면 violations가 비어야 합니다."""
         image = _make_image_bytes(640, 960)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client()
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-007", image=image).model_dump())
@@ -198,7 +198,7 @@ class TestScenarioD_Verifier통합:
         """run_verifiers 실행 기록이 tool_call_log에 남아야 합니다."""
         image = _make_image_bytes(640, 960)
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client()
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-008", image=image).model_dump())
@@ -216,7 +216,7 @@ class TestScenarioD_Verifier통합:
         # top 슬롯만 있는 단일 garment 응답
         single_garment_json = json.dumps({"garments": [_MOCK_VLM_GARMENTS[0]]})
 
-        with patch("app.agents.vision.nodes.step1_nodes._build_client") as mock_build:
+        with patch("agents.vision.nodes.step1_nodes._build_client") as mock_build:
             mock_build.return_value = _make_mock_client(json_text=single_garment_json)
             graph = build_vision_graph()
             result = graph.invoke(VisionState(session_id="test-009", image=image).model_dump())
