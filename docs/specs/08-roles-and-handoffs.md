@@ -62,19 +62,24 @@
 
 ### 3.3 코드 소유권 (CODEOWNERS)
 
-> **[협의 필요]** 아래 경로는 `backend/` 루트 기준으로 작성되어 있으나, Backend 스캐폴드(PR #3)에서 `api/` 루트로 구현되었습니다. 전원 검토 후 실제 디렉토리 구조에 맞게 업데이트해야 합니다.
+> **경로 반영 메모 (2026-05-10)**: 초기 spec은 모든 agent 코드를
+> `backend/app/agents/<name>/` 한 위치에 두기로 협의했으나, repo 루트의
+> `agents/` 디렉토리로 통합됐다. Vision은 `agents/vision/`, Recommendation은
+> `agents/recommendation/`에 위치한다. 백엔드 셀렉터(`app.agents_stub.get_subgraphs`)는
+> 두 패키지를 `agents.*`로 import한다.
 
 ```
-backend/app/agents/vision/         @vision-owner
-backend/app/agents/context/        @context-owner
-backend/app/agents/recommendation/ @rec-owner
-backend/app/scoring/               @rec-owner
-backend/app/api/                   @backend-owner
-backend/app/services/              @backend-owner
+agents/vision/                     @vision-owner
+agents/recommendation/             @rec-owner
+api/app/agents_stub/               @backend-owner
+api/app/api/                       @backend-owner
+api/app/services/                  @backend-owner
+api/app/orchestration/             @backend-owner
 frontend/                          @frontend-owner
 docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @backend-owner @frontend-owner
 ```
 
+Context Agent는 아직 코드 미작성 (셀렉터에서 stub로 폴백).
 `07-data-contracts.md` 변경은 5인 전원 승인 필요.
 
 ### 3.4 PR 사이즈

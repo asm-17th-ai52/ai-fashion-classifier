@@ -1,4 +1,10 @@
-"""Super-graph integration tests with stub sub-graphs — spec §11.1, §11.2."""
+"""Super-graph integration tests — spec §11.1, §11.2.
+
+The production routes drive the graph asynchronously
+(``astream_events``/``ainvoke``), and the recommendation_adapter is
+``async def`` because the underlying agent sub-graph is async-only. So
+these tests exercise the graph through ``ainvoke`` to mirror prod.
+"""
 from __future__ import annotations
 
 import time
@@ -27,9 +33,10 @@ def _state(image_bytes: bytes, **overrides) -> SessionState:
     )
 
 
-def test_super_graph_runs_all_three_agents(red_jpeg_bytes: bytes) -> None:
+@pytest.mark.asyncio
+async def test_super_graph_runs_all_three_agents(red_jpeg_bytes: bytes) -> None:
     state = _state(red_jpeg_bytes, event_type="interview")
-    final = SUPER_GRAPH.invoke(state)
+    final = await SUPER_GRAPH.ainvoke(state)
     assert final["outfit"] is not None
     assert final["context"] is not None
     assert final["recommendation"] is not None
@@ -38,9 +45,10 @@ def test_super_graph_runs_all_three_agents(red_jpeg_bytes: bytes) -> None:
     assert len(final["recommendation"].checks) == 13  # 13 binary checks
 
 
-def test_super_graph_custom_event_uses_fallback(red_jpeg_bytes: bytes) -> None:
+@pytest.mark.asyncio
+async def test_super_graph_custom_event_uses_fallback(red_jpeg_bytes: bytes) -> None:
     state = _state(red_jpeg_bytes, event_type="송년회", event_type_is_custom=True)
-    final = SUPER_GRAPH.invoke(state)
+    final = await SUPER_GRAPH.ainvoke(state)
     # Stub falls back to general for custom events; real Tier-2 will replace this.
     assert final["context"].dress_code.tier in {
         DressCodeTier.tier2_live,
@@ -49,9 +57,10 @@ def test_super_graph_custom_event_uses_fallback(red_jpeg_bytes: bytes) -> None:
     assert final["tier2_triggered"] is True
 
 
-def test_build_session_response_assembles_meta(red_jpeg_bytes: bytes) -> None:
+@pytest.mark.asyncio
+async def test_build_session_response_assembles_meta(red_jpeg_bytes: bytes) -> None:
     state = _state(red_jpeg_bytes)
-    final = SUPER_GRAPH.invoke(state)
+    final = await SUPER_GRAPH.ainvoke(state)
     resp = build_session_response(final, state.started_at_ms)
     assert resp.session_id == state.session_id
     assert resp.meta.latency_ms >= 0
@@ -60,11 +69,12 @@ def test_build_session_response_assembles_meta(red_jpeg_bytes: bytes) -> None:
     assert resp.meta.agent_latencies_ms.recommendation is not None
 
 
-def test_super_graph_score_is_deterministic(red_jpeg_bytes: bytes) -> None:
-    """Stub score function is purely deterministic; same input → same overall."""
+@pytest.mark.asyncio
+async def test_super_graph_score_is_deterministic(red_jpeg_bytes: bytes) -> None:
+    """Same input → same overall score across runs."""
     overall_runs = []
     for _ in range(3):
         state = _state(red_jpeg_bytes, event_type="interview", session_id="sess_det")
-        final = SUPER_GRAPH.invoke(state)
+        final = await SUPER_GRAPH.ainvoke(state)
         overall_runs.append(final["recommendation"].score.overall)
     assert len(set(overall_runs)) == 1
