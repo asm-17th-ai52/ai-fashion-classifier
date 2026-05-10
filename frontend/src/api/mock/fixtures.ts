@@ -1,9 +1,9 @@
 import type { SessionResponse, SimulateResponse, Check } from "../schemas";
 
-// Scenario: business_meeting in Seoul, spring 8.5°C
+// Scenario: business_meeting
 // Outfit: white dress shirt + navy chino + brown loafers
-// Fails: A1(shoes), A3(bottom), B2(style consistency), C2(saturation), D1(warmth)
-// Not applicable: A5(winter coat), D2(rain)
+// Fails: A1(shoes), A3(bottom), B2(style consistency), C2(saturation)
+// Not applicable: A5(winter coat)
 
 export const MOCK_CHECKS: Check[] = [
   // ── Group A: dresscode ──────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ export const MOCK_CHECKS: Check[] = [
     result: "not_applicable",
     applicable: false,
     is_blocker: true,
-    evidence_facts: ["현재 thermal_band: mild (해당 없음)"],
+    evidence_facts: ["캐주얼~비즈니스 복장 기준, 외투 검사 미해당"],
   },
   {
     id: "A6",
@@ -134,41 +134,9 @@ export const MOCK_CHECKS: Check[] = [
     is_blocker: false,
     evidence_facts: ["네이비·화이트 조합: business_meeting 권장 색상"],
   },
-  // ── Group D: environment ────────────────────────────────────────────────────
+  // ── Group D: confidence ─────────────────────────────────────────────────────
   {
     id: "D1",
-    group: "environment",
-    label: "보온지수가 thermal_band 기대치와 일치",
-    result: "fail",
-    applicable: true,
-    is_blocker: false,
-    evidence_facts: [
-      "현재 기온: 8.5°C (cold 구간)",
-      "현재 착장 보온지수: 3 (mild 수준)",
-      "cold 구간 기대 보온지수: 5–7",
-    ],
-  },
-  {
-    id: "D2",
-    group: "environment",
-    label: "강수 대비 외투 보호",
-    result: "not_applicable",
-    applicable: false,
-    is_blocker: false,
-    evidence_facts: ["강수 확률: 5% (해당 없음)"],
-  },
-  {
-    id: "D3",
-    group: "environment",
-    label: "현재 기온 대비 소재 적합성",
-    result: "pass",
-    applicable: true,
-    is_blocker: false,
-    evidence_facts: ["울 블렌드 소재 — cold 구간에서 적합"],
-  },
-  // ── Group E: confidence ─────────────────────────────────────────────────────
-  {
-    id: "E1",
     group: "confidence",
     label: "Vision 평균 confidence ≥ 0.6",
     result: "pass",
@@ -177,7 +145,7 @@ export const MOCK_CHECKS: Check[] = [
     evidence_facts: ["Vision 평균 confidence: 0.87"],
   },
   {
-    id: "E2",
+    id: "D2",
     group: "confidence",
     label: "Context tier 신뢰도 충분",
     result: "pass",
@@ -191,10 +159,9 @@ export const MOCK_CHECKS: Check[] = [
 // dresscode:   3/5 applicable = 0.60  (A1, A3 fail; A5 N/A)
 // consistency: 2/3 applicable = 0.67  (B2 fail)
 // color:       2/3 applicable = 0.67  (C2 fail)
-// environment: 1/2 applicable = 0.50  (D1 fail; D2 N/A)
 // confidence:  2/2 applicable = 1.00
-// overall = mean([0.60, 0.67, 0.67, 0.50, 1.00]) * 100 ≈ 69
-export const ORIGINAL_OVERALL = 69;
+// overall = mean([0.60, 0.67, 0.67, 1.00]) * 100 ≈ 73
+export const ORIGINAL_OVERALL = 73;
 
 export const MOCK_SESSION: SessionResponse = {
   session_id: "mock-session-001",
@@ -235,12 +202,6 @@ export const MOCK_SESSION: SessionResponse = {
       tier: "tier1",
       evidence_quotes: [],
     },
-    weather: {
-      available: true,
-      temperature_celsius: 8.5,
-      feels_like_celsius: 6.0,
-      precipitation_probability: 0.05,
-    },
   },
   recommendation: {
     session_id: "mock-session-001",
@@ -251,7 +212,6 @@ export const MOCK_SESSION: SessionResponse = {
         dresscode: 0.60,
         consistency: 0.67,
         color: 0.67,
-        environment: 0.50,
         confidence: 1.00,
       },
       blocker_failed: false,
@@ -286,22 +246,9 @@ export const MOCK_SESSION: SessionResponse = {
         user_facing_text:
           "하의를 치노에서 슬랙스로 교체하면 드레스코드 기대 범위에 부합합니다.",
       },
-      {
-        id: "sg_3",
-        fixes_check_ids: ["D1"],
-        action: { type: "add", target_slot: "outer", to: "블레이저 또는 트렌치코트" },
-        rationale_facts: [
-          "현재 기온 8.5°C — cold 구간 기대 보온지수 5–7",
-          "현재 보온지수 3: 블레이저 추가 시 보온지수 +3~4",
-        ],
-        expected_overall_delta: 5,
-        removes_blocker: false,
-        user_facing_text:
-          "기온 대비 보온이 부족합니다. 블레이저나 트렌치코트를 추가해 주세요.",
-      },
     ],
     explanation:
-      "비즈니스 미팅 복장으로 상의와 전반적 포멀니스는 적합하나, 신발과 하의 카테고리가 기대 범위를 벗어났습니다. 기온(8.5°C) 대비 보온이 부족하며, 스타일 일관성과 채도 조정이 필요합니다.",
+      "비즈니스 미팅 복장으로 상의와 전반적 포멀니스는 적합하나, 신발과 하의 카테고리가 기대 범위를 벗어났습니다. 스타일 일관성과 채도 조정이 필요합니다.",
   },
   meta: {
     latency_ms: 4230,
@@ -313,7 +260,6 @@ export const MOCK_SESSION: SessionResponse = {
 const SUGGESTION_FIXES: Record<string, string[]> = {
   sg_1: ["A1", "B2"],
   sg_2: ["A3"],
-  sg_3: ["D1"],
 };
 
 export function computeSimulation(
@@ -332,7 +278,6 @@ export function computeSimulation(
     "dresscode",
     "consistency",
     "color",
-    "environment",
     "confidence",
   ] as const;
 

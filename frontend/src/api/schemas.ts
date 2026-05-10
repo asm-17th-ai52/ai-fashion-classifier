@@ -31,7 +31,6 @@ export const CheckGroup = z.enum([
   "dresscode",
   "consistency",
   "color",
-  "environment",
   "confidence",
 ]);
 export type CheckGroup = z.infer<typeof CheckGroup>;
@@ -54,12 +53,15 @@ export const UploadFormSchema = z.object({
     ),
   event_type: z.string().min(1, "일정 유형을 선택하거나 입력해 주세요"),
   event_type_is_custom: z.boolean().default(false),
-  event_datetime: z.string().min(1, "일정 날짜/시간을 입력해 주세요"),
-  city_code: z.string().min(1, "도시를 선택해 주세요"),
-  is_indoor: z.boolean().default(false),
   allow_live_research: z.boolean().default(true),
 });
 export type UploadFormValues = z.infer<typeof UploadFormSchema>;
+
+// POST /v1/sessions → 202
+export const CreateSessionResponseSchema = z.object({
+  session_id: z.string(),
+});
+export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>;
 
 // ─── API response schemas ─────────────────────────────────────────────────────
 
@@ -94,7 +96,7 @@ export const ScoreSchema = z.object({
   overall: z.number().int().min(0).max(100),
   method: z.literal("group_weighted_with_blocker_cap"),
   group_scores: z.record(
-    z.enum(["dresscode", "consistency", "color", "environment", "confidence"]),
+    z.enum(["dresscode", "consistency", "color", "confidence"]),
     z.number().min(0).max(1)
   ),
   blocker_failed: z.boolean(),
@@ -117,12 +119,6 @@ export const SessionResponseSchema = z.object({
           })
         )
         .optional(),
-    }),
-    weather: z.object({
-      available: z.boolean(),
-      temperature_celsius: z.number().optional(),
-      feels_like_celsius: z.number().optional(),
-      precipitation_probability: z.number().min(0).max(1).optional(),
     }),
   }),
   recommendation: z.object({

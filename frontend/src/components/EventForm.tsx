@@ -1,9 +1,6 @@
 import { useFormContext } from "react-hook-form";
 import type { UploadFormValues, StandardEventType } from "@/api/schemas";
 import { STANDARD_EVENT_LABELS } from "@/api/schemas";
-import { CITY_OPTIONS } from "@/lib/i18n";
-import DatePicker from "./DatePicker";
-import TimePicker from "./TimePicker";
 
 const STANDARD_KEYS = Object.keys(STANDARD_EVENT_LABELS) as StandardEventType[];
 const CUSTOM_SENTINEL = "__custom__";
@@ -17,30 +14,12 @@ const inputCls =
 export default function EventForm() {
   const { register, setValue, watch, formState: { errors } } = useFormContext<UploadFormValues>();
 
-  const eventType      = watch("event_type");
-  const isCustom       = watch("event_type_is_custom");
-  const cityCode       = watch("city_code");
-  const isIndoor       = watch("is_indoor");
-  const allowLive      = watch("allow_live_research");
-  const datetimeVal    = watch("event_datetime") ?? "";
-
-  const [dateVal, timeVal] = datetimeVal.includes("T")
-    ? datetimeVal.split("T")
-    : [datetimeVal, ""];
+  const eventType = watch("event_type");
+  const isCustom  = watch("event_type_is_custom");
+  const allowLive = watch("allow_live_research");
 
   const sv: typeof setValue = (name, value) =>
     setValue(name, value as never, { shouldValidate: true, shouldDirty: true });
-
-  function setDate(d: string) {
-    sv("event_datetime", d && timeVal ? `${d}T${timeVal}` : d ? `${d}T12:00` : "");
-  }
-  function setTime(t: string) {
-    const d = dateVal || (() => {
-      const n = new Date();
-      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-    })();
-    sv("event_datetime", `${d}T${t}`);
-  }
 
   const selectedKey = isCustom ? CUSTOM_SENTINEL : eventType;
 
@@ -101,58 +80,6 @@ export default function EventForm() {
         {errors.event_type && (
           <p role="alert" className="text-[11px] text-accent-red mt-1.5">{errors.event_type.message}</p>
         )}
-      </div>
-
-      {/* ── 날짜 ── */}
-      <div>
-        <div className={labelCls}>
-          날짜 <span className="text-accent-red normal-case tracking-normal">*</span>
-        </div>
-        <DatePicker value={dateVal} onChange={setDate} />
-      </div>
-
-      {/* ── 시간 ── */}
-      <div>
-        <div className={labelCls}>
-          시간 <span className="text-accent-red normal-case tracking-normal">*</span>
-        </div>
-        <TimePicker value={timeVal} onChange={setTime} />
-        {errors.event_datetime && (
-          <p role="alert" className="text-[11px] text-accent-red mt-1.5">{errors.event_datetime.message}</p>
-        )}
-      </div>
-
-      {/* ── 도시 ── */}
-      <div>
-        <div className={labelCls}>
-          도시 <span className="text-accent-red normal-case tracking-normal">*</span>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {CITY_OPTIONS.map((c) => (
-            <button key={c.value} type="button" onClick={() => sv("city_code", c.value)}
-              className={`${pillBase} py-1.5 ${cityCode === c.value ? pillActive : pillIdle}`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-        {errors.city_code && (
-          <p role="alert" className="text-[11px] text-accent-red mt-1.5">{errors.city_code.message}</p>
-        )}
-      </div>
-
-      {/* ── 장소 ── */}
-      <div>
-        <div className={labelCls}>장소</div>
-        <div className="grid grid-cols-2 gap-1.5">
-          {([{ val: false, label: "실외" }, { val: true, label: "실내" }] as const).map(({ val, label }) => (
-            <button key={label} type="button" onClick={() => sv("is_indoor", val)}
-              className={`${pillBase} py-2 ${isIndoor === val ? pillActive : pillIdle}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* ── 실시간 외부 검색 ── */}

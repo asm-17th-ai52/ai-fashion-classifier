@@ -1,6 +1,7 @@
-import type { SessionResponse, SimulateResponse, UploadFormValues } from "./schemas";
+import type { CreateSessionResponse, SessionResponse, SimulateResponse, UploadFormValues } from "./schemas";
 
 export interface ApiAdapter {
-  createSession(form: UploadFormValues): Promise<SessionResponse>;
+  createSession(form: UploadFormValues): Promise<CreateSessionResponse>;
+  getSession(sessionId: string): Promise<SessionResponse>;
   simulate(sessionId: string, appliedSuggestionIds: string[]): Promise<SimulateResponse>;
 }

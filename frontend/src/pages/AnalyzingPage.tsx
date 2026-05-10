@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionState } from "@/store/sessionContext";
 import { useSession } from "@/hooks/useSession";
@@ -13,101 +13,44 @@ const ERROR_MESSAGES: Record<string, string> = {
   agent_failed:        "AI 분석에 실패했어요. 다시 시도해 주세요.",
 };
 
-interface Stage {
-  id: string;
-  agent: string;
-  label: string;
-  startAt: number;
-  doneAt: number;
-  logs: string[];
-}
+// pct 구간 → 에이전트 단계 매핑 (시각 전용, SSE message가 진짜 내용)
+const STAGES = [
+  { id: "vision",    label: "garment detection", start: 0,  end: 35  },
+  { id: "context",   label: "dress code retrieval",    start: 35, end: 65  },
+  { id: "rec",       label: "17 binary checks",  start: 65, end: 88  },
+  { id: "narrator",  label: "fix mapping",        start: 88, end: 100 },
+];
 
-function buildStages(isCustom: boolean): Stage[] {
-  return [
-    {
-      id: "vision", agent: "VISION", label: "garment detection + attribute extraction",
-      startAt: 0, doneAt: 0.3,
-      logs: [
-        "detecting persons in frame…",
-        "ROI: 1 person, frontal=true",
-        "garment[top]: dress_shirt · solid",
-        "garment[bottom]: chino · solid",
-        "garment[shoes]: loafer · solid",
-        "formality_label computed",
-        "vision.confidence avg=0.87",
-      ],
-    },
-    {
-      id: "context", agent: "CONTEXT",
-      label: isCustom ? "live web search + dress code" : "weather + dress code retrieval",
-      startAt: 0.3, doneAt: 0.62,
-      logs: isCustom
-        ? ["web.search query built", "4 sources fetched", "tier=tier2_live", "weather.api → ok"]
-        : ["rag.search: match=0.91", "weather.fetch: ok", "thermal_band computed", "context assembled"],
-    },
-    {
-      id: "rec", agent: "RECOMMEND", label: "17 binary checks",
-      startAt: 0.62, doneAt: 0.88,
-      logs: [
-        "group A (dresscode) evaluated",
-        "group B (consistency) evaluated",
-        "group C (color) evaluated",
-        "group D (environment) evaluated",
-        "group E (confidence) evaluated",
-      ],
-    },
-    {
-      id: "narr", agent: "NARRATOR", label: "fix mapping + simulation",
-      startAt: 0.88, doneAt: 1.0,
-      logs: [
-        "map fail → fix actions",
-        "simulate Δscores…",
-        "rendering ko-KR summary…",
-        "done",
-      ],
-    },
-  ];
-}
+const AGENT_COLORS: Record<string, string> = {
+  vision:   "#5fb8ff",
+  context:  "#fbbf57",
+  rec:      "#6ee7a7",
+  narrator: "#c084fc",
+};
 
-const isMock = import.meta.env.VITE_API_ADAPTER === "mock";
+const AGENT_LABELS: Record<string, string> = {
+  vision:   "VISION",
+  context:  "CONTEXT",
+  rec:      "RECOMMEND",
+  narrator: "NARRATOR",
+};
 
 export default function AnalyzingPage() {
   const state = useSessionState();
   const { reset } = useSession();
   const navigate = useNavigate();
 
-  const isCustom  = state.status === "loading" ? state.isCustomEvent : false;
-  const expectedMs = isMock ? 2400 : isCustom ? 13000 : 8000;
-  const overtimeMs = isMock ? 4000  : isCustom ? 18000 : 10000;
-  const stages = buildStages(isCustom);
-
-  const [elapsed, setElapsed] = useState(0);
-  const [tick, setTick] = useState(0);
-  const [overtime, setOvertime] = useState(false);
-
   useEffect(() => {
     if (state.status === "idle") navigate("/", { replace: true });
   }, [state.status, navigate]);
+
   useEffect(() => {
     if (state.status === "success") navigate("/result", { replace: true });
   }, [state.status, navigate]);
-  useEffect(() => {
-    if (state.status !== "loading") return;
-    const id = setInterval(() => setElapsed((e) => e + 100), 100);
-    return () => clearInterval(id);
-  }, [state.status]);
-  useEffect(() => {
-    if (state.status !== "loading") return;
-    const id = setInterval(() => setTick((t) => t + 1), 280);
-    return () => clearInterval(id);
-  }, [state.status]);
-  useEffect(() => {
-    if (elapsed >= overtimeMs) setOvertime(true);
-  }, [elapsed, overtimeMs]);
 
-  const progress   = Math.min(elapsed / expectedMs, 0.99);
-  const overallPct = Math.round(progress * 100);
-  const elapsedSec = (elapsed / 1000).toFixed(1);
+  const progress = state.status === "loading" ? state.progress : 0;
+  const logs     = state.status === "loading" ? state.logs : [];
+  const overtime = progress > 0 && progress < 100 && logs.length > 12;
 
   /* ── Error ── */
   if (state.status === "error") {
@@ -134,26 +77,6 @@ export default function AnalyzingPage() {
     );
   }
 
-  /* Build cumulative terminal log */
-  const visibleLogs: { agent: string; line: string; ts: string }[] = [];
-  stages.forEach((st) => {
-    if (progress >= st.startAt) {
-      const sp = Math.min(1, (progress - st.startAt) / (st.doneAt - st.startAt));
-      const shown = Math.ceil(sp * st.logs.length);
-      st.logs.slice(0, shown).forEach((line, i) => {
-        const t = (st.startAt * expectedMs / 1000 + i * 0.3);
-        visibleLogs.push({ agent: st.agent, line, ts: t.toFixed(1) + "s" });
-      });
-    }
-  });
-
-  const AGENT_COLORS: Record<string, string> = {
-    VISION:    "#5fb8ff",
-    CONTEXT:   "#fbbf57",
-    RECOMMEND: "#6ee7a7",
-    NARRATOR:  "#c084fc",
-  };
-
   /* ── Analyzing ── */
   return (
     <div className="min-h-screen bg-canvas text-body font-sans">
@@ -170,7 +93,6 @@ export default function AnalyzingPage() {
 
           {/* Header */}
           <div className="flex items-center gap-3 mb-6 animate-fade-in">
-            {/* V1 spinning circle */}
             <div className="relative w-8 h-8 flex-shrink-0">
               <div className="absolute inset-0 rounded-full border-2 border-hairline2" />
               <div
@@ -184,18 +106,17 @@ export default function AnalyzingPage() {
                 pipeline: vision → context → recommendation → narrator
               </div>
             </div>
-            <Pill tone="blue">{overallPct}%</Pill>
-            <span className="font-mono text-[10px] text-stone">{elapsedSec}s</span>
+            <Pill tone="blue">{progress}%</Pill>
           </div>
 
           {/* 4-agent card grid */}
           <div className="bg-panel border border-hairline rounded-xl p-4 mb-4 animate-fade-in">
             <div className="grid grid-cols-4 gap-3">
-              {stages.map((st) => {
-                const sp     = Math.max(0, Math.min(1, (progress - st.startAt) / (st.doneAt - st.startAt)));
+              {STAGES.map((st) => {
+                const sp     = Math.max(0, Math.min(1, (progress - st.start) / (st.end - st.start)));
                 const pct    = Math.round(sp * 100);
-                const done   = progress >= st.doneAt;
-                const active = progress >= st.startAt && !done;
+                const done   = progress >= st.end;
+                const active = progress >= st.start && !done;
                 const color  = done ? "#6ee7a7" : active ? "#5fb8ff" : "#525766";
                 return (
                   <div
@@ -208,7 +129,7 @@ export default function AnalyzingPage() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-mono text-[9px] tracking-[0.1em]" style={{ color }}>
-                        {st.agent}
+                        {AGENT_LABELS[st.id]}
                       </span>
                       <span className="font-mono text-[9px]" style={{ color }}>
                         {done ? "✓" : active ? `${pct}%` : "—"}
@@ -229,53 +150,65 @@ export default function AnalyzingPage() {
                 );
               })}
             </div>
+
+            {/* Overall progress bar */}
+            <div className="mt-4 h-[3px] rounded-full bg-canvas overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${progress}%`,
+                  background: "linear-gradient(to right, #5fb8ff, #6ee7a7)",
+                  boxShadow: "0 0 8px rgba(95,184,255,0.4)",
+                }}
+              />
+            </div>
           </div>
 
-          {/* Terminal log */}
+          {/* Terminal log — SSE messages */}
           <div className="rounded-xl overflow-hidden border border-hairline animate-fade-in" style={{ background: "#06070a" }}>
-            {/* title bar */}
             <div className="flex items-center gap-2 px-4 py-2 border-b border-hairline bg-panel">
               <span className="w-2 h-2 rounded-full" style={{ background: "#ff5f57" }} />
               <span className="w-2 h-2 rounded-full" style={{ background: "#febc2e" }} />
               <span className="w-2 h-2 rounded-full" style={{ background: "#28c840" }} />
-              <span className="font-mono text-[10px] text-stone ml-2">
-                ~/sessions/sess_001 · agent.log
-              </span>
+              <span className="font-mono text-[10px] text-stone ml-2">agent.log</span>
               <div className="flex-1" />
               <span className="font-mono text-[10px] text-stone">
-                live · {visibleLogs.length} lines
+                live · {logs.length} lines
               </span>
             </div>
-            {/* log lines */}
             <div
               className="p-4 font-mono text-[10.5px] leading-[1.65] overflow-y-auto relative"
-              style={{ height: 300 }}
+              style={{ height: 260 }}
               aria-live="polite"
             >
-              {/* top fade */}
               <div
                 className="absolute top-0 left-0 right-0 h-8 pointer-events-none z-10"
                 style={{ background: "linear-gradient(to bottom, #06070a, transparent)" }}
               />
-              {visibleLogs.slice(-14).map((l, i) => (
-                <div key={i} className="flex gap-3">
-                  <span className="text-stone/60 w-10 flex-shrink-0">{l.ts}</span>
-                  <span
-                    className="w-28 flex-shrink-0"
-                    style={{ color: AGENT_COLORS[l.agent] ?? "#7c818f" }}
-                  >
-                    [{l.agent.padEnd(8)}]
-                  </span>
-                  <span className="text-body">{l.line}</span>
-                </div>
-              ))}
+              {logs.slice(-14).map((msg, i) => {
+                // 어느 에이전트 구간인지 추론 (시각 전용)
+                const logPct = progress;
+                const stage = STAGES.find(
+                  (s) => logPct >= s.start && logPct < s.end
+                ) ?? STAGES[STAGES.length - 1];
+                const color = AGENT_COLORS[stage.id] ?? "#7c818f";
+                const agentLabel = AGENT_LABELS[stage.id] ?? "SYSTEM";
+                return (
+                  <div key={i} className="flex gap-3">
+                    <span
+                      className="w-28 flex-shrink-0 text-[9px]"
+                      style={{ color }}
+                    >
+                      [{agentLabel.padEnd(8)}]
+                    </span>
+                    <span className="text-body">{msg}</span>
+                  </div>
+                );
+              })}
               {/* cursor */}
               <div className="flex gap-3 mt-1">
-                <span className="text-stone/60 w-10" />
                 <span className="text-stone/60 w-28" />
-                <span style={{ color: "#5fb8ff" }}>
-                  {["▏", "▎", "▍", "▎"][tick % 4]}
-                </span>
+                <span style={{ color: "#5fb8ff" }}>▏</span>
               </div>
             </div>
           </div>

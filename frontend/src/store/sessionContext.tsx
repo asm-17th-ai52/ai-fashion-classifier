@@ -4,12 +4,13 @@ import type { SessionResponse, SimulateResponse } from "@/api/schemas";
 
 export type SessionState =
   | { status: "idle" }
-  | { status: "loading"; isCustomEvent: boolean }
+  | { status: "loading"; isCustomEvent: boolean; progress: number; logs: string[] }
   | { status: "success"; session: SessionResponse; simulation: SimulateResponse | null }
   | { status: "error"; error: Error; errorCode?: string };
 
 type SessionAction =
   | { type: "SUBMIT"; isCustomEvent: boolean }
+  | { type: "PROGRESS"; pct: number; message: string }
   | { type: "SUCCESS"; session: SessionResponse }
   | { type: "ERROR"; error: Error; errorCode?: string }
   | { type: "SIMULATE_SUCCESS"; simulation: SimulateResponse | null }
@@ -18,7 +19,14 @@ type SessionAction =
 function reducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
     case "SUBMIT":
-      return { status: "loading", isCustomEvent: action.isCustomEvent };
+      return { status: "loading", isCustomEvent: action.isCustomEvent, progress: 0, logs: [] };
+    case "PROGRESS":
+      if (state.status !== "loading") return state;
+      return {
+        ...state,
+        progress: action.pct,
+        logs: [...state.logs, action.message],
+      };
     case "SUCCESS":
       return { status: "success", session: action.session, simulation: null };
     case "ERROR":

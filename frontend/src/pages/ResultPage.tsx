@@ -140,19 +140,7 @@ export default function ResultPage() {
           <div className="bg-panel border border-hairline rounded-xl p-4 animate-fade-in">
             <SectionHead idx="04" label="CONTEXT" />
             <div className="font-mono text-[10px] leading-[1.7] text-body space-y-0.5">
-              {context.weather.available && typeof context.weather.temperature_celsius === "number" && (
-                <div>
-                  🌡{" "}
-                  {Math.round(context.weather.temperature_celsius)}°C
-                  {typeof context.weather.feels_like_celsius === "number" && (
-                    <span className="text-stone"> · 체감 {Math.round(context.weather.feels_like_celsius)}°C</span>
-                  )}
-                </div>
-              )}
-              {!context.weather.available && (
-                <div className="text-stone">🌡 날씨 데이터 없음</div>
-              )}
-              <div className="mt-1" style={{ color: "#6ee7a7" }}>
+              <div style={{ color: "#6ee7a7" }}>
                 {dressTier}
                 {session.meta.tier2_triggered && " · live search"}
               </div>

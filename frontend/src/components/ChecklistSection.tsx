@@ -7,9 +7,9 @@ interface ChecklistSectionProps {
   flippedToPass?: Set<string>;
 }
 
-const GROUP_ORDER: CheckGroup[] = ["dresscode", "consistency", "color", "environment", "confidence"];
+const GROUP_ORDER: CheckGroup[] = ["dresscode", "consistency", "color", "confidence"];
 const GROUP_SHORT: Record<CheckGroup, string> = {
-  dresscode: "DRES", consistency: "CONS", color: "COLR", environment: "ENVR", confidence: "CONF",
+  dresscode: "DRES", consistency: "CONS", color: "COLR", confidence: "CONF",
 };
 
 function MatrixCell({ check, flipped, onHover, hovered }: {
