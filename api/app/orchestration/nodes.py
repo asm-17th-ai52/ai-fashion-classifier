@@ -28,7 +28,17 @@ log = get_logger("backend.orchestration")
 
 
 def preprocess_node(state: Any) -> dict[str, Any]:
-    """Run the image preprocessing pipeline. Raises propagate to FastAPI."""
+    """Run the image preprocessing pipeline. Raises propagate to FastAPI.
+
+    Idempotent: spec §5.3 has the route call this once before persisting
+    state to ``pending_cache``, then ``astream_events()`` re-enters the
+    graph from the entry point. If preprocessing has already happened we
+    short-circuit with the existing output so neither the pixel work nor
+    the log line repeats.
+    """
+    if state_get(state, "preprocessed_image") is not None:
+        return {}
+
     t0 = time.monotonic()
     image_bytes = state_get(state, "image_bytes")
     session_id = state_get(state, "session_id")
