@@ -144,7 +144,7 @@ async def stream_session(session_id: str):
     )
 ```
 
-`map_langgraph_event()`는 LangGraph `on_chain_start` / `on_chain_end` 이벤트를 위 SSE 포맷으로 변환하는 내부 헬퍼. 각 노드에서 방출할 `message`와 `pct`는 노드 구현부에서 state에 기록한다.
+`map_langgraph_event()`는 LangGraph `on_chain_start` / `on_chain_end` 이벤트를 위 SSE 포맷으로 변환하는 내부 헬퍼. Agent 노드는 SSE를 알지 못하며, `message`와 `pct`는 Backend가 `event["name"]`과 `event["data"]["output"]`을 읽어 직접 포맷팅한다. 각 Agent별 이벤트 구조와 꺼낼 수 있는 데이터는 `02/03/04-agent-*-spec.md §astream_events() 참조 정보`에 정의되어 있다.
 
 ### 4.3 `GET /v1/sessions/{session_id}`
 - 완료된 분석 결과 재조회 (멱등). SSE 연결이 끊겼을 때 결과를 다시 받아올 때 사용.
