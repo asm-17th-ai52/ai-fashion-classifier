@@ -61,17 +61,26 @@
 | Frontend | MSW(Mock Service Worker) 로 Backend mock |
 
 ### 3.3 코드 소유권 (CODEOWNERS)
+
+> **경로 반영 메모 (2026-05-10)**: 초기 spec은 모든 agent 코드를
+> `backend/app/agents/<name>/` 한 위치에 두기로 협의했으나, 머지된 PR들에서
+> Vision은 ``api/app/agents/vision/``로, Recommendation은 ``agent/recommendation/``
+> (단수)로 들어갔다. 백엔드 셀렉터(``app.agents_stub.get_subgraphs``)는 두 경로
+> 모두를 직접 import하도록 갱신됐다. 추후 일관 정리(`agents/` 통합 등)가 합의되면
+> 셀렉터 한 곳만 다시 수정하면 된다.
+
 ```
-backend/app/agents/vision/         @vision-owner
-backend/app/agents/context/        @context-owner
-backend/app/agents/recommendation/ @rec-owner
-backend/app/scoring/               @rec-owner
-backend/app/api/                   @backend-owner
-backend/app/services/              @backend-owner
+api/app/agents/vision/             @vision-owner
+agent/recommendation/              @rec-owner
+api/app/agents_stub/               @backend-owner
+api/app/api/                       @backend-owner
+api/app/services/                  @backend-owner
+api/app/orchestration/             @backend-owner
 frontend/                          @frontend-owner
 docs/specs/07-data-contracts.md    @vision-owner @context-owner @rec-owner @backend-owner @frontend-owner
 ```
 
+Context Agent는 아직 코드 미작성 (셀렉터에서 stub로 폴백).
 `07-data-contracts.md` 변경은 5인 전원 승인 필요.
 
 ### 3.4 PR 사이즈

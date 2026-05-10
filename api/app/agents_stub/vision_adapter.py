@@ -1,26 +1,21 @@
-"""agents.vision → super-graph 어댑터.
+"""app.agents.vision → super-graph 어댑터.
 
 Vision Agent는 자체 ``VisionState(session_id, image)`` 위에서 돌고
-``agents.vision.VisionResponse`` (자체 스키마)를 반환한다.
+``app.agents.vision.VisionResponse`` (자체 스키마)를 반환한다.
 Super-graph는 ``SessionState(image_bytes, preprocessed_image)``를 쓰고
 결과를 공개 계약 ``app.schemas.VisionResponse`` 형태로 ``outfit`` 슬롯에 담는다.
 
-이 모듈은 둘 사이의 입력 키와 응답 스키마를 변환한다.
-selector(``__init__.py``)가 ``agents.vision`` 임포트 성공 시
+이 모듈은 둘 사이의 입력 키와 응답 스키마를 변환한다. selector
+(``agents_stub/__init__.py``)가 ``app.agents.vision`` 임포트 성공 시
 stub 대신 이 어댑터를 super-graph 노드로 등록한다.
-
-import 경로 ``agents.vision``은 repo 루트 ``agents/`` 디렉토리에 vision 패키지가
-있다고 가정한다 (08-roles-and-handoffs.md §3.3 협의 사항). FastAPI는 ``api/``에서
-실행되므로 ``api/main.py``와 ``api/tests/conftest.py``에서 repo 루트를 sys.path에
-삽입해 ``agents.``를 임포트 가능하게 한다.
 """
 from __future__ import annotations
 
 import time
 from typing import Any
 
-from agents.vision import analyze_outfit  # type: ignore[import-not-found]
-from app.orchestration.state_helpers import state_get
+from app.agents.vision import analyze_outfit  # type: ignore[import-not-found]
+from app.utils.state_helpers import state_get
 from app.schemas import (
     Garment,
     GarmentSlot,

@@ -22,7 +22,7 @@ from app.schemas import (
 )
 from app.services.preprocess import preprocess_image
 
-from .state_helpers import state_get
+from app.utils.state_helpers import state_get
 
 log = get_logger("backend.orchestration")
 
