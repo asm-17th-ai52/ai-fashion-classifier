@@ -5,8 +5,8 @@ import pytest
 
 pytest.importorskip("langgraph")
 
-from agents.recommendation import ContextResponse, VisionResponse, build_recommendation_response
-from agents.recommendation.graph import recommendation_subgraph
+from agent.recommendation import ContextResponse, VisionResponse, build_recommendation_response
+from agent.recommendation.graph import recommendation_subgraph
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"

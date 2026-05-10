@@ -5,9 +5,9 @@ import pytest
 
 pytest.importorskip("langgraph")
 
-from agents.recommendation import ContextResponse, VisionResponse, build_recommendation_response
-from agents.recommendation.graph import build_recommendation_graph
-from agents.recommendation.narrator import (
+from agent.recommendation import ContextResponse, VisionResponse, build_recommendation_response
+from agent.recommendation.graph import build_recommendation_graph
+from agent.recommendation.narrator import (
     Narration,
     SuggestionUserText,
     validate_narration,
