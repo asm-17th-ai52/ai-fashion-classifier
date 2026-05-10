@@ -405,7 +405,26 @@ async def analyze_outfit(session_id: str, image_bytes: bytes) -> VisionResponse:
 
 Backend는 `analyze_outfit` 을 호출해 Vision Agent를 사용한다 (`05-backend-spec.md §5.2`).
 
-## 12. 테스트 전략
+## 12. `astream_events()` 참조 정보 (Backend 전용)
+
+Backend가 `SUPER_GRAPH.astream_events()`를 호출할 때 본 sub-graph에서 발생하는 이벤트와, 각 이벤트에서 꺼낼 수 있는 데이터를 정의한다. Backend의 `map_langgraph_event()` 헬퍼는 이 정보를 기반으로 SSE `progress` 메시지를 포맷팅한다.
+
+| LangGraph 이벤트 | `event["name"]` | `event["data"]["output"]`에서 꺼낼 값 | Backend가 생성할 `message` 예시 |
+|---|---|---|---|
+| `on_chain_start` | `validate_image` | — | `"사진을 확인하고 있어요"` |
+| `on_chain_end` | `validate_image` | `state.preprocess_meta.person_detected` | `"사진에서 사람을 감지했어요"` |
+| `on_chain_start` | `vlm_extract_all` | — | `"착장을 분석하고 있어요"` |
+| `on_chain_end` | `vlm_extract_all` | `state.garments[i].category`, `state.garments[i].color_name` | `"상의: 드레스 셔츠 · 화이트"` (슬롯별 1회) |
+| `on_chain_end` | `overwrite_colors` | — | `"색상 정보를 정밀 보정했어요"` |
+| `on_chain_start` | `run_verifiers` | — | `"착장 정보를 검증하고 있어요"` |
+| `on_chain_start` | `critic_llm` | — | `"세부 속성을 재확인하고 있어요"` |
+| `on_chain_end` | `vision` (sub-graph 전체) | — | `"착장 분석을 완료했어요"` |
+
+- `on_chain_start` 이벤트: `event["data"]`는 입력 state. 아직 출력이 없으므로 고정 메시지를 사용한다.
+- `on_chain_end` 이벤트: `event["data"]["output"]`에 노드가 반환한 부분 state dict가 담긴다.
+- 슬롯별 메시지(`vlm_extract_all`)는 `garments` 리스트를 순회해 상의 → 하의 → 신발 순으로 각 1회 방출한다.
+
+## 13. 테스트 전략
 
 ### 12.1 골든 셋
 - `tests/fixtures/vision/` — 라벨링된 이미지 20장 + `expected.json`
