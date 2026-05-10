@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.recommendation import ContextResponse, VisionResponse, build_recommendation_response
+from agents.recommendation import ContextResponse, VisionResponse, build_recommendation_response
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
