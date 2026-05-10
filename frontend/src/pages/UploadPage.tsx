@@ -15,12 +15,9 @@ import Pill from "@/components/Pill";
 /* Derived context preview — reads form values and infers pipeline metadata */
 function ContextPreview() {
   const { watch } = useFormContext<UploadFormValues>();
-  const eventType  = watch("event_type");
-  const datetime   = watch("event_datetime");
-  const cityCode   = watch("city_code");
-  const isIndoor   = watch("is_indoor");
+  const eventType    = watch("event_type");
   const liveResearch = watch("allow_live_research");
-  const isCustom   = watch("event_type_is_custom");
+  const isCustom     = watch("event_type_is_custom");
 
   const eventLabel = !eventType
     ? "—"
@@ -30,21 +27,9 @@ function ContextPreview() {
 
   const tier = !eventType ? "—" : (isCustom && liveResearch) ? "tier2_live" : "tier1_rag";
 
-  const dt = datetime ? new Date(datetime) : null;
-  const mo = dt ? dt.getMonth() + 1 : null;
-  const thermal =
-    mo == null ? "—"
-    : (mo <= 2 || mo === 12) ? "cold"
-    : (mo <= 4 || mo >= 11) ? "cool"
-    : (mo <= 9) ? "warm" : "mild";
-
   const rows: [string, string, "blue" | "mute" | "yellow" | "green"][] = [
-    ["weather.temp_c",      "fetch at submit…", "mute"],
-    ["thermal_band",        thermal,             thermal === "cold" ? "yellow" : "mute"],
-    ["dress_code.tier",     tier,                tier !== "—" ? "green" : "mute"],
-    ["event_type",          eventLabel,          eventType ? "blue" : "mute"],
-    ["city_code",           cityCode || "—",     cityCode ? "blue" : "mute"],
-    ["is_indoor",           isIndoor ? "true" : "false", "mute"],
+    ["dress_code.tier", tier,               tier !== "—" ? "green" : "mute"],
+    ["event_type",      eventLabel,         eventType ? "blue" : "mute"],
   ];
 
   return (
@@ -83,7 +68,7 @@ export default function UploadPage() {
   const methods = useForm<UploadFormValues>({
     resolver: zodResolver(UploadFormSchema),
     mode: "onChange",
-    defaultValues: { event_type_is_custom: false, is_indoor: false, allow_live_research: true },
+    defaultValues: { event_type_is_custom: false, allow_live_research: true },
   });
   const { handleSubmit, watch, formState: { isValid } } = methods;
   const hasImage = !!watch("image");
