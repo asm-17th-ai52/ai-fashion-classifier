@@ -1,4 +1,4 @@
-import type { ApiAdapter } from "../types";
+import type { ApiAdapter, StreamCallbacks } from "../types";
 import type { UploadFormValues, CreateSessionResponse, SessionResponse, SimulateResponse } from "../schemas";
 import { SessionResponseSchema, SimulateResponseSchema } from "../schemas";
 
@@ -18,6 +18,14 @@ async function parseResponse<T>(
   }
   const data = await res.json();
   return parse(data);
+}
+
+function extractErrorCode(err: unknown): string | undefined {
+  if (err && typeof err === "object" && "body" in err) {
+    const body = (err as { body?: { error?: { code?: string } } }).body;
+    return body?.error?.code;
+  }
+  return undefined;
 }
 
 export class HttpApiAdapter implements ApiAdapter {
@@ -49,12 +57,48 @@ export class HttpApiAdapter implements ApiAdapter {
     const data = await res.json() as Record<string, unknown>;
 
     // Backend may return full SessionResponse synchronously (no SSE endpoint).
-    // Cache it so getSession() can return it immediately on EventSource onerror fallback.
+    // Cache it so subscribeStream's onerror fallback can return it immediately.
     if (data && "recommendation" in data) {
       this._syncCache.set(String(data.session_id), data);
     }
 
     return { session_id: String(data.session_id) };
+  }
+
+  subscribeStream(sessionId: string, callbacks: StreamCallbacks): () => void {
+    const es = new EventSource(`${BASE_URL}/v1/sessions/${sessionId}/stream`);
+
+    es.onmessage = (e) => {
+      const ev = JSON.parse(e.data) as {
+        type: "progress" | "done" | "error";
+        pct: number;
+        message: string;
+        result?: unknown;
+        code?: string;
+      };
+      if (ev.type === "progress") {
+        callbacks.onProgress(ev.pct, ev.message);
+      } else if (ev.type === "done") {
+        es.close();
+        callbacks.onDone(ev.result as SessionResponse);
+      } else if (ev.type === "error") {
+        es.close();
+        callbacks.onError(new Error(ev.message), ev.code);
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      // 연결 끊김 — GET /v1/sessions/{id} 폴백
+      this.getSession(sessionId)
+        .then((session) => callbacks.onDone(session))
+        .catch((err) => {
+          const error = err instanceof Error ? err : new Error(String(err));
+          callbacks.onError(error, extractErrorCode(err));
+        });
+    };
+
+    return () => es.close();
   }
 
   async getSession(sessionId: string): Promise<SessionResponse> {

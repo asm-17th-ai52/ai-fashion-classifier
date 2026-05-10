@@ -1,8 +1,13 @@
 import { apiAdapter } from "./adapter";
 import type { UploadFormValues, CreateSessionResponse, SessionResponse, SimulateResponse } from "./schemas";
+import type { StreamCallbacks } from "./types";
 
 export function createSession(form: UploadFormValues): Promise<CreateSessionResponse> {
   return apiAdapter.createSession(form);
+}
+
+export function subscribeStream(sessionId: string, callbacks: StreamCallbacks): () => void {
+  return apiAdapter.subscribeStream(sessionId, callbacks);
 }
 
 export function getSession(sessionId: string): Promise<SessionResponse> {
