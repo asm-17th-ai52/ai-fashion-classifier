@@ -222,6 +222,12 @@ def _rationale_facts(
         facts.append(f"adding {_target_name(action)} completes required slots")
     elif action.type == ActionType.RECOLOR:
         facts.append(f"preferred_tones={_fmt_list(context.dress_code.color_guidance.preferred_tones)}")
+    elif action.type == ActionType.SWAP:
+        current_avg = _current_formality_avg(outfit)
+        next_avg = _simulated_formality_avg(outfit, action)
+        facts.append(f"swapping {action.target_slot} raises outfit_formality_avg from {current_avg} to {next_avg}")
+    elif action.type == ActionType.ADD:
+        facts.append(f"adding {_target_name(action)} completes required slots for {action.target_slot}")
 
     return _unique(facts)
 
