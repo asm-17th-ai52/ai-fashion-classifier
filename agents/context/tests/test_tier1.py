@@ -114,16 +114,24 @@ class TestIsTier1Match:
 # ---------------------------------------------------------------------------
 
 
-# 실측 캘리브레이션 결과 (ko-sroberta-multitask + 9 코퍼스 + 한국어/영어 alias 36 쿼리):
+# 실측 캘리브레이션 결과 (ko-sroberta-multitask + 9 코퍼스 + 한국어/영어 alias 36 쿼리,
+# 수정된 ``_l2_to_cosine`` (faiss_l2_squared 직접 사용) 기준):
 #   - top-1 accuracy: 32/36 (89%) — 영어 단일 슬러그(interview), "등교", "데일리/평상복"
 #     같은 짧고 모호한 쿼리에서 cross-event 매칭 발생.
-#   - score ≥ 0.6 (spec threshold): 19/36 (53%) — 임계값 미달 쿼리는 Tier-2 폴백 경로로
-#     처리되므로 정합성 측면에서 OK.
-#   - 가장 높은 cross-match: 결혼식 2부 → wedding_guest 0.543 (custom 의도지만 의미 인접).
+#   - score ≥ 0.6 (spec threshold): 13/36 (36%) — 임계값 미달 쿼리는 Tier-2 폴백 경로로
+#     처리되므로 정합성 측면에서 OK. spec §12 의 95% Tier-1 hit 목표는 *목표*이지 *게이트*
+#     아님 (spec §6.1 Tier-2 폴백이 흡수).
+#   - 가장 높은 cross-match (full 36): 0.628 — "비즈니스 캐주얼" 쿼리에서 rank-2 의
+#     business_meeting 점수. **단** top-1 은 정답 office_daily (0.729) 이므로 silent
+#     misroute 위험 없음 (is_tier1_match 는 top-1 만 채택).
+#   - 명백한 wrong-top-1 4건 (interview/등교/데일리/평상복) 의 score 는 모두 < 0.6 —
+#     `is_tier1_match` 가 모두 거부 → Tier-2 폴백 (안전).
+#   - Primary 한국어 alias-style 쿼리 8 개의 self-score: min 0.622, max 0.731.
 #
-# 따라서 통합 테스트는 다음 두 가지를 보증한다:
-#   1. 한국어 ‘대표 쿼리’ 9 개에 대해 top-1 이 모두 정확하다 (alias/짧은 슬러그는 제외).
+# 따라서 통합 테스트는 다음을 보증한다:
+#   1. 한국어 ‘대표 쿼리’ 8 개의 top-1 이 모두 정확하고 self-score ≥ SELF_MATCH_FLOOR.
 #   2. 명백한 custom 쿼리 ("회사 송년회 연말 회식") 의 top-1 점수가 임계값 미만이다.
+#   3. Cross-match (대표 쿼리의 다른 event_type 점수) 가 self-match 보다 낮다.
 # SELF_MATCH_FLOOR 는 spec §12 의 95% hit rate 목표가 아니라, 본 모델의 실측 하한선이다.
 SELF_MATCH_FLOOR = 0.55
 

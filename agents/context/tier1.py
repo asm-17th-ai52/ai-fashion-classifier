@@ -5,8 +5,9 @@ Tier-1 정적 RAG: 사전 빌드된 FAISS 인덱스에서 드레스코드 문서
 - 임베딩: ``embedder.build_embedder()`` (ko-sroberta-multitask, normalize=True)
 - 인덱스: ``data/dresscode/faiss_index/`` 에 사전 빌드 + repo 커밋
 - 거리: 기본 L2 (FAISS ``IndexFlatL2``).
-  단위 정규화 임베딩에서 ``L2² = 2(1 - cos)`` 이므로 ``cos = 1 - L2²/2`` 로 환산하여
-  [0, 1] (정확히는 [-1, 1]) 의 cosine relevance 를 반환한다.
+  FAISS ``IndexFlatL2.search()`` 는 이미 **squared** L2 distance 를 반환하므로
+  단위 정규화 임베딩에서 ``cos = 1 - L²/2`` 를 직접 적용한다 (``_l2_to_cosine``).
+  반환 score 는 [-1, 1] (일반적으로 [0, 1]) cosine relevance.
   ※ langchain-community ``DistanceStrategy.MAX_INNER_PRODUCT`` + ``with_relevance_scores``
   는 본 모델/인덱스 조합에서 점수가 사실상 반전되어 나오는 known issue 가 있어 사용하지 않음.
 - 임계값: 0.6 — spec ``docs/specs/03-agent-context-spec.md`` §5.2 / §6.1 그대로.
@@ -51,13 +52,24 @@ STATIC_DIR = _PACKAGE_DIR / "data" / "dresscode" / "static"
 THRESHOLD: float = 0.6
 
 
-def _l2_to_cosine(l2_distance: float) -> float:
-    """단위 정규화 임베딩의 L2 거리를 cosine relevance score 로 환산.
+def _l2_to_cosine(faiss_l2_squared: float) -> float:
+    """FAISS ``IndexFlatL2.search()`` 반환값을 cosine relevance score 로 환산.
 
-    L2² = 2(1 - cos) ⟹ cos = 1 - L2² / 2.
-    동일 벡터 시 cos=1, 직교 시 cos=0, 반대 방향 시 cos=-1.
+    Important: FAISS ``IndexFlatL2.search()`` 는 이미 **squared** L2 distance 를 반환한다
+    (`langchain_community.vectorstores.FAISS.similarity_search_with_score` 도 그 값을
+    그대로 score 로 노출). 따라서 인자는 ``‖a-b‖²`` 라는 가정 하에 환산한다.
+
+    수학:
+        단위 정규화 임베딩에서 ``‖a-b‖² = 2 - 2·cos(a, b)`` 이므로
+        ``cos = 1 - ‖a-b‖²/2``.
+
+    경계값: 동일 벡터 시 cos=1, 직교 시 cos=0, 반대 방향 시 cos=-1.
+
+    History: 초기 구현에서 ``** 2`` 를 한 번 더 적용하는 버그가 있었고 (사실상
+    ``cos = 1 - L⁴/2``), 점수가 과대 평가되었다. 본 수정으로 manual IP 계산 결과와
+    소수 4자리까지 일치한다.
     """
-    return 1.0 - (l2_distance ** 2) / 2.0
+    return 1.0 - faiss_l2_squared / 2.0
 
 
 @lru_cache(maxsize=1)
@@ -86,16 +98,17 @@ def tier1_retrieve(query: str, k: int = 3) -> list[dict[str, Any]]:
             - ``metadata``: frontmatter dict 사본 (formality range, categories 등 포함)
             - ``doc``: 원본 langchain ``Document``
     """
-    # similarity_search_with_score 는 L2 거리(작을수록 유사)를 반환한다.
+    # similarity_search_with_score 는 FAISS IndexFlatL2 의 SQUARED L2 distance 를
+    # 그대로 반환한다 (작을수록 유사). 정규화 임베딩에서 cos = 1 - L²/2 로 환산.
     hits = _store().similarity_search_with_score(query, k=k)
     return [
         {
             "event_type": doc.metadata["event_type"],
-            "score": _l2_to_cosine(float(l2)),
+            "score": _l2_to_cosine(float(l2_squared)),
             "metadata": dict(doc.metadata),
             "doc": doc,
         }
-        for doc, l2 in hits
+        for doc, l2_squared in hits
     ]
 
 
