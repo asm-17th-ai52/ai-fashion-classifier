@@ -15,6 +15,9 @@ from .state import RecommendationState
 from .suggestions import build_explanation, build_suggestions
 
 
+_DEFAULT_NARRATOR_CLIENT = object()
+
+
 def node_evaluate_checks(state: RecommendationState) -> dict:
     return {"checks": evaluate_checks(state.outfit, state.context)}
 
@@ -44,14 +47,16 @@ def _make_node_narrate(client: NarratorClient | None):
     def node_narrate(state: RecommendationState) -> dict:
         if state.score is None or state.fallback_explanation is None:
             raise ValueError("score and fallback_explanation must be ready before narration")
+        result = narrate_once(
+            state.score,
+            state.checks,
+            state.suggestions,
+            state.fallback_explanation,
+            client,
+        )
         return {
-            "narration": narrate_once(
-                state.score,
-                state.checks,
-                state.suggestions,
-                state.fallback_explanation,
-                client,
-            )
+            "narration": result.narration,
+            "narrator_used_fallback": result.used_fallback,
         }
 
     return node_narrate
@@ -63,7 +68,10 @@ def node_safety_filter(state: RecommendationState) -> dict:
 
     violations = validate_narration(state.narration, state.checks, state.suggestions)
     if not violations:
-        return {"narrator_violations": [], "narrator_used_fallback": False}
+        return {
+            "narrator_violations": [],
+            "narrator_used_fallback": state.narrator_used_fallback,
+        }
 
     if state.narrator_retries >= 1:
         return {
@@ -111,8 +119,12 @@ def node_pack_response(state: RecommendationState) -> dict:
     }
 
 
-def build_recommendation_graph(narrator_client: NarratorClient | None = None):
-    client = build_default_narrator_client() if narrator_client is None else narrator_client
+def build_recommendation_graph(narrator_client: NarratorClient | None | object = _DEFAULT_NARRATOR_CLIENT):
+    client = (
+        build_default_narrator_client()
+        if narrator_client is _DEFAULT_NARRATOR_CLIENT
+        else narrator_client
+    )
     graph = StateGraph(RecommendationState)
 
     graph.add_node("evaluate_checks", node_evaluate_checks)

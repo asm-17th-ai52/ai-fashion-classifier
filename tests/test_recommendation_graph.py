@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("langgraph")
 
 from agent.recommendation import ContextResponse, VisionResponse, build_recommendation_response
-from agent.recommendation.graph import recommendation_subgraph
+from agent.recommendation.graph import build_recommendation_graph
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
@@ -22,8 +22,9 @@ def test_recommendation_subgraph_matches_core_response(scenario: str):
     outfit = VisionResponse.model_validate(load_fixture("vision", scenario))
     context = ContextResponse.model_validate(load_fixture("context", scenario))
     expected = build_recommendation_response(outfit, context)
+    graph = build_recommendation_graph(narrator_client=None)
 
-    state = recommendation_subgraph.invoke(
+    state = graph.invoke(
         {
             "outfit": outfit,
             "context": context,
