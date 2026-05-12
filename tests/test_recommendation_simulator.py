@@ -39,6 +39,6 @@ def test_simulator_swap_recomputes_checks_from_modified_outfit():
     simulated_checks = evaluate_checks(simulated_outfit, context)
     simulated_score = calculate_score(simulated_checks)
 
-    assert simulated_outfit.garments[2].category == "loafers"
+    assert simulated_outfit.garments[2].category == "로퍼"
     assert simulated_score.overall == 100
     assert {check.id for check in simulated_checks if check.result == "fail"} == set()

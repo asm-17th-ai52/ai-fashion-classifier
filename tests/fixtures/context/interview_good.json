@@ -6,14 +6,14 @@
     "rag_match_score": 0.95,
     "expected_formality_range": [70, 95],
     "expected_categories": {
-      "top": ["shirt", "blouse", "blazer"],
-      "bottom": ["slacks", "skirt"],
-      "outer": ["blazer", "coat"],
-      "shoes": ["dress_shoes", "loafers"]
+      "top": ["셔츠", "블라우스"],
+      "bottom": ["슬랙스", "치마"],
+      "outer": ["블레이저", "자켓"],
+      "shoes": ["구두", "로퍼"]
     },
     "color_guidance": {
-      "preferred_tones": ["black", "navy", "gray", "white"],
-      "avoid_tones": ["red", "yellow", "neon"]
+      "preferred_tones": ["흰색", "회색", "검정", "네이비", "진회색"],
+      "avoid_tones": ["빨강", "노랑", "핑크", "코랄", "연두", "주황"]
     },
     "source_doc_ids": ["dresscode_interview_v1"],
     "extraction_confidence": 0.9

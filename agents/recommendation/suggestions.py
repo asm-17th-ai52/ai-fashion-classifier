@@ -256,8 +256,10 @@ def _target_item(context: ContextResponse, slot: GarmentSlot) -> str:
 
 
 def _preferred_category(categories: list[str], slot: GarmentSlot) -> str:
-    if slot == GarmentSlot.SHOES and "loafers" in categories:
-        return "loafers"
+    if slot == GarmentSlot.SHOES:
+        for preferred in ("로퍼", "loafers"):
+            if preferred in categories:
+                return preferred
     return categories[0] if categories else slot.value
 
 
