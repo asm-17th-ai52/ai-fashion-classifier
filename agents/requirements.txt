@@ -1,0 +1,23 @@
+# Vision Agent 핵심 의존성
+langgraph>=0.2.0
+langchain-google-genai>=2.0.0
+google-generativeai>=0.8.0
+
+# 이미지 처리
+opencv-python>=4.9.0
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# 배경 제거 (의류 색상 추출 정확도 향상)
+rembg>=2.0.50
+onnxruntime>=1.17.0
+
+# 스키마 및 유효성 검사
+pydantic>=2.0.0
+
+# 환경변수 로드
+python-dotenv>=1.0.0
+
+# 테스트
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

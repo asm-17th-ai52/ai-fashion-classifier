@@ -402,7 +402,24 @@ __all__ = ["recommendation_subgraph"]
 `evaluate_checks` → `compute_score` → `pack_response_simulate`
 LLM 미사용, 결정적, < 100ms.
 
-## 11. 테스트 전략
+## 11. `astream_events()` 참조 정보 (Backend 전용)
+
+Backend가 `SUPER_GRAPH.astream_events()`를 호출할 때 본 sub-graph에서 발생하는 이벤트와, 각 이벤트에서 꺼낼 수 있는 데이터를 정의한다.
+
+| LangGraph 이벤트 | `event["name"]` | `event["data"]["output"]`에서 꺼낼 값 | Backend가 생성할 `message` 예시 |
+|---|---|---|---|
+| `on_chain_start` | `evaluate_checks` | — | `"17개 항목을 체크하고 있어요"` |
+| `on_chain_end` | `evaluate_checks` | `state.checks` pass/fail 개수 | `"드레스코드 · 색상 · 환경 적합성 평가 완료"` |
+| `on_chain_end` | `compute_score` | `state.score.overall` | `"종합 점수를 계산했어요"` |
+| `on_chain_start` | `generate_candidates` | — | `"개선 제안을 생성하고 있어요"` |
+| `on_chain_start` | `narrate` | — | `"분석 결과를 정리하고 있어요"` |
+| `on_chain_end` | `safety_filter` | — | — (메시지 없음, 내부 처리) |
+| `on_chain_end` | `recommendation` (sub-graph 전체) | — | `"분석이 완료됐어요"` → `done` 이벤트로 전환 |
+
+- `evaluate_checks` 완료 시 `state.checks`에서 `pass` / `fail` / `not_applicable` 개수를 집계해 메시지를 구성할 수 있으나, 단순 고정 문자열도 무방하다.
+- `recommendation` sub-graph의 `on_chain_end`가 파이프라인 마지막 노드이므로, Backend는 이 이벤트에서 `done` SSE 이벤트를 방출하고 스트림을 닫는다.
+
+## 12. 테스트 전략
 
 ### 11.1 체크 단위 테스트
 - 17개 체크 함수 각각 ≥ 4개 케이스 (pass / fail / N/A / 경계값)

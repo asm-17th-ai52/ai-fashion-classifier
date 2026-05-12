@@ -6,7 +6,7 @@
 ## 1. 책임
 
 1. 이미지 업로드 + 일정 입력 폼
-2. 분석 진행 상태 표시 (스트리밍 아님 — 단일 응답 대기)
+2. 분석 진행 상태 표시 (SSE 스트림 구독 — `EventSource`)
 3. 점수 결과 시각화 (4개 그룹 + 종합)
 4. 제안 카드 UI + 수용/거절 + 시뮬레이션 점수 갱신
 5. 재촬영/입력 수정 흐름
@@ -36,24 +36,43 @@
 ### 4.1 `/` — Upload (홈)
 - 좌: 사진 드래그&드롭 / 카메라 촬영
 - 우: 일정 입력 폼
-  - `event_type` **콤보 입력** (드롭다운 9개 표준값 + "직접 입력" 옵션)
+  - `event_type` **콤보 입력** (9개 표준값 pill 그리드 + "직접 입력 ▸" 전행)
     - 표준값 선택 시: `event_type_is_custom = false`
     - 직접 입력 시: 한국어 free-text → `event_type_is_custom = true` 자동 설정
     - 직접 입력 옆에 안내 배지: "외부 자료를 실시간 검색해 분석합니다 (+5초)"
-  - `event_datetime` datetime-local input
-  - `allow_live_research` 토글 (고급 옵션, 기본 ON)
-    - OFF 안내 텍스트: "사용자 정의 일정은 일반 가이드로 분석됩니다"
-- 하단: "분석하기" 버튼 (모든 필수 입력 충족 시 활성화)
+  - `allow_live_research` 토글 (기본 ON)
+    - OFF 안내 텍스트: "일반 가이드로 분석됩니다"
+  - 날짜·시간·도시 입력 **없음**
+- 하단: "분석하기" 버튼 (이미지 + 일정 유형 충족 시 활성화)
 
 ### 4.2 `/analyzing` — 진행 상태
-- 단일 요청 대기 (Tier-1: 6~8초 / Tier-2: 12~15초)
-- 진행 텍스트 (시간 기반 fade, 서버에서 phase 알림 없음):
-  1. "착장 분석 중…"
-  2. "일정 컨텍스트 조회 중…"
-  3. (사용자 정의 event_type일 때 추가) "외부 자료 검색 중…"
-  4. "적합도 계산 중…"
-- Tier-2 트리거 추정 시 진행 텍스트의 12초 임계 늘림
-- 임계 초과 시 "예상보다 오래 걸리고 있어요" 메시지
+SSE 스트림(`GET /v1/sessions/{id}/stream`)을 `EventSource`로 구독하여 실시간으로 화면에 반영한다.
+
+- **프로그레스바**: `event.pct` (0–100) 값을 그대로 사용
+- **로그 메시지**: `event.message`를 별도 변환 없이 그대로 표시 (백엔드가 한국어 자연어로 전송)
+- **완료**: `type === "done"` 수신 시 `event.result`를 세션 스토어에 저장 후 `/result`로 이동
+- **에러**: `type === "error"` 수신 시 `event.message`를 에러 화면에 표시
+- **연결 끊김**: `EventSource` onerror 발생 시 `GET /v1/sessions/{id}`로 결과 재조회 시도 (폴백)
+- 임계 초과(Tier-1: 10초 / Tier-2: 18초) 시 "예상보다 오래 걸리고 있어요" 메시지 표시
+
+```ts
+const es = new EventSource(`/v1/sessions/${sessionId}/stream`);
+
+es.onmessage = (e) => {
+  const event = JSON.parse(e.data);
+  if (event.type === "progress") {
+    setProgress(event.pct);
+    appendLog(event.message);          // 그대로 렌더링
+  } else if (event.type === "done") {
+    setSession(event.result);
+    es.close();
+    navigate("/result");
+  } else if (event.type === "error") {
+    setError(event.message);           // 그대로 렌더링
+    es.close();
+  }
+};
+```
 
 ### 4.3 `/result` — 결과
 - 상단: **종합 점수 게이지** (0~100, 색상 단계: 30/60/80)
@@ -83,9 +102,16 @@ Upload form
    │ submit
    ▼
 POST /v1/sessions (multipart)
-   │ 200
+   │ 202 → { session_id }
    ▼
-SessionResponse → result store
+GET /v1/sessions/{id}/stream (EventSource)
+   │
+   ├─ progress 이벤트 → pct + message 그대로 화면 렌더링
+   │
+   └─ done 이벤트 → result 세션 스토어 저장 → /result 이동
+        │
+        │ (연결 끊김 폴백)
+        └─ GET /v1/sessions/{id} → SessionResponse → result store
    ▼
 Result page render
    ↑
@@ -127,26 +153,32 @@ POST /v1/sessions/{id}/simulate { applied_suggestion_ids: [...] }
 src/
 ├── pages/
 │   ├── UploadPage.tsx
-│   ├── AnalyzingPage.tsx
+│   ├── AnalyzingPage.tsx    # SSE EventSource 구독, pct/message 렌더링
 │   └── ResultPage.tsx
 ├── components/
 │   ├── ImageDropzone.tsx
-│   ├── EventForm.tsx
+│   ├── EventForm.tsx        # event_type pill 그리드 + allow_live_research 토글
 │   ├── ScoreGauge.tsx
-│   ├── DimensionBars.tsx
+│   ├── ChecklistSection.tsx
 │   ├── SuggestionCard.tsx
 │   └── ErrorBoundary.tsx
 ├── api/
-│   ├── client.ts            # 자동생성 OpenAPI client wrapper
-│   └── schemas.ts           # zod schemas (07-data-contracts와 동기)
+│   ├── client.ts            # createSession / getSession / simulate
+│   ├── schemas.ts           # zod schemas (07-data-contracts와 동기)
+│   │                        # UploadFormSchema: image + event_type + allow_live_research
+│   │                        # CreateSessionResponseSchema: { session_id }
+│   ├── types.ts             # ApiAdapter 인터페이스
+│   ├── adapter.ts           # mock ↔ http 전환
+│   ├── http/httpAdapter.ts
+│   └── mock/mockAdapter.ts
 ├── hooks/
-│   ├── useSession.ts
+│   ├── useSession.ts        # createSession → EventSource 구독 → 폴백
 │   └── useSimulation.ts
 ├── store/
-│   └── sessionContext.tsx
+│   └── sessionContext.tsx   # loading state: progress + logs
 ├── lib/
 │   ├── format.ts            # 점수 표시 유틸
-│   └── i18n.ts              # 차원 라벨 매핑
+│   └── i18n.ts              # 그룹 라벨 매핑 (GROUP_LABELS)
 └── App.tsx
 ```
 
@@ -187,7 +219,7 @@ src/
 ### 11.2 컴포넌트
 - ScoreGauge: 점수별 색상 단계
 - SuggestionCard: 시뮬레이션 토글 동작
-- EventForm: 필드 검증
+- EventForm: event_type pill 선택 + 직접 입력 전환 검증
 
 ### 11.3 E2E (Playwright)
 - 골든 이미지 업로드 → 결과 화면 표시 (모킹된 Backend)

@@ -415,7 +415,25 @@ from .graph import context_subgraph
 __all__ = ["context_subgraph"]
 ```
 
-## 11. 테스트 전략
+## 11. `astream_events()` 참조 정보 (Backend 전용)
+
+Backend가 `SUPER_GRAPH.astream_events()`를 호출할 때 본 sub-graph에서 발생하는 이벤트와, 각 이벤트에서 꺼낼 수 있는 데이터를 정의한다.
+
+| LangGraph 이벤트 | `event["name"]` | `event["data"]["output"]`에서 꺼낼 값 | Backend가 생성할 `message` 예시 |
+|---|---|---|---|
+| `on_chain_start` | `tier1_retrieve` | — | `"드레스코드 기준을 조회하고 있어요"` |
+| `on_chain_end` | `decide_tier` | `state.tier` (`"tier1"` \| `"tier2_live"`) | tier1: `"드레스코드 기준을 찾았어요"` / tier2: `"외부 자료를 실시간으로 검색할게요"` |
+| `on_chain_start` | `tier2_plan_query` | — | `"검색 쿼리를 생성하고 있어요"` |
+| `on_chain_end` | `tier2_web_search` | `state.search_results` 개수 | `"관련 자료 {n}건을 찾았어요"` |
+| `on_chain_end` | `tier2_fetch_pages` | — | `"자료를 읽고 있어요"` |
+| `on_chain_start` | `tier2_extract_facts` | — | `"드레스코드 정보를 추출하고 있어요"` |
+| `on_chain_end` | `pack_context` | `state.weather.temperature_celsius` | `"오늘 날씨 정보를 가져왔어요 · {temp}°C"` (날씨 가용 시) / `"상황 컨텍스트 준비 완료"` |
+| `on_chain_end` | `context` (sub-graph 전체) | — | `"상황 분석을 완료했어요"` |
+
+- Tier-2 루프(`tier2_web_search` → `tier2_fetch_pages` → `tier2_extract_facts`)는 최대 3회 반복된다. 각 반복마다 이벤트가 재방출되므로 Backend는 동일 노드의 중복 이벤트를 자연스럽게 처리한다.
+- `weather.temperature_celsius`가 없는 경우(날씨 API 실패)에는 온도 없이 `"상황 컨텍스트 준비 완료"`만 방출한다.
+
+## 12. 테스트 전략
 
 ### 12.1 Tier-1 단위 테스트
 - 9개 event_type 모두 score > 0.6 검증
