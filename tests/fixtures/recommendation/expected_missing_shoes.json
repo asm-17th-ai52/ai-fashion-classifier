@@ -116,7 +116,7 @@
       "applicable": true,
       "is_blocker": false,
       "evidence_facts": [
-        "delta_e2000_top_bottom=28",
+        "delta_e2000_top_bottom=41",
         "expected_delta_e2000_range=[10, 50]"
       ]
     },

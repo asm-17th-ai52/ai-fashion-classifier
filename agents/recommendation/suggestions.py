@@ -149,7 +149,17 @@ def _action_for_failed_check(
         slot = missing[0]
         return Action(type=ActionType.ADD, target_slot=slot.value, to=_target_item(context, slot))
 
-    if failed_check.id in {"A3", "A4", "B1"}:
+    if failed_check.id == "A3":
+        slot = GarmentSlot.SHOES
+        current = _primary_garment(outfit, slot)
+        return Action(
+            type=ActionType.SWAP,
+            target_slot=slot.value,
+            from_=_current_item(current),
+            to=_target_item(context, slot),
+        )
+
+    if failed_check.id in {"A4", "B1"}:
         slot = _lowest_formality_slot(outfit) or GarmentSlot.SHOES
         current = _primary_garment(outfit, slot)
         return Action(

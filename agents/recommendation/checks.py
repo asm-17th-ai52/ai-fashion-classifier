@@ -1,4 +1,4 @@
-from math import sqrt
+from math import atan2, cos, degrees, exp, radians, sin, sqrt
 
 from .schemas import (
     CheckGroup,
@@ -19,6 +19,35 @@ FORMALITY_SCORE = {
     FormalityLabel.BUSINESS_CASUAL: 65,
     FormalityLabel.BUSINESS_FORMAL: 85,
     FormalityLabel.FORMAL: 95,
+}
+
+COLOR_ALIASES = {
+    "black": "black",
+    "검정": "black",
+    "navy": "navy",
+    "네이비": "navy",
+    "gray": "gray",
+    "grey": "gray",
+    "회색": "gray",
+    "진회색": "gray",
+    "white": "white",
+    "흰색": "white",
+    "오프화이트": "white",
+    "beige": "beige",
+    "베이지": "beige",
+    "red": "red",
+    "빨강": "red",
+    "yellow": "yellow",
+    "노랑": "yellow",
+    "neon": "neon",
+    "green": "green",
+    "연두": "green",
+    "orange": "orange",
+    "주황": "orange",
+    "pink": "pink",
+    "핑크": "pink",
+    "coral": "coral",
+    "코랄": "coral",
 }
 
 
@@ -152,8 +181,14 @@ def _a4_formality_avg(outfit: VisionResponse, context: ContextResponse) -> Check
 
 
 def _a5_no_avoid_tones(outfit: VisionResponse, context: ContextResponse) -> CheckResult:
-    avoid_tones = set(context.dress_code.color_guidance.avoid_tones)
-    color_names = {garment.primary_color.name for garment in outfit.garments}
+    avoid_tones = {
+        _canonical_tone(tone)
+        for tone in context.dress_code.color_guidance.avoid_tones
+    }
+    color_names = {
+        _canonical_color_name(garment)
+        for garment in outfit.garments
+    }
     matched = sorted(color_names & avoid_tones)
     result = CheckStatus.PASS if not matched else CheckStatus.FAIL
     return _check(
@@ -334,7 +369,7 @@ def _std(values: list[int]) -> float:
 
 
 def _contrast_score(rgb1: tuple[int, int, int], rgb2: tuple[int, int, int]) -> int:
-    return round(abs(_brightness(rgb1) - _brightness(rgb2)) / 3.75)
+    return round(_delta_e2000(_rgb_to_lab(rgb1), _rgb_to_lab(rgb2)))
 
 
 def _saturation(rgb: tuple[int, int, int]) -> float:
@@ -350,10 +385,159 @@ def _value_std(garments: list[Garment]) -> int:
     return round(_std(values) / 2.55)
 
 
-def _brightness(rgb: tuple[int, int, int]) -> float:
-    red, green, blue = rgb
-    return 0.299 * red + 0.587 * green + 0.114 * blue
-
-
 def _fmt_list(values: list[object]) -> str:
     return "[" + ", ".join(str(value) for value in values) + "]"
+
+
+def _canonical_color_name(garment: Garment) -> str:
+    color_name = garment.primary_color.name.strip().lower()
+    if color_name in COLOR_ALIASES:
+        return COLOR_ALIASES[color_name]
+    return _rgb_to_tone(garment.primary_color.rgb)
+
+
+def _canonical_tone(tone: str) -> str:
+    return COLOR_ALIASES.get(tone.strip().lower(), tone.strip().lower())
+
+
+def _rgb_to_tone(rgb: tuple[int, int, int]) -> str:
+    red, green, blue = rgb
+    saturation = _saturation(rgb)
+    value = max(rgb)
+    if value < 55:
+        return "black"
+    if saturation < 0.12:
+        if value > 210:
+            return "white"
+        return "gray"
+
+    hue = degrees(atan2(sqrt(3) * (green - blue), 2 * red - green - blue))
+    if hue < 0:
+        hue += 360
+    if hue < 20 or hue >= 340:
+        return "red"
+    if hue < 45:
+        return "orange"
+    if hue < 75:
+        return "yellow"
+    if hue < 170:
+        return "green"
+    if hue < 255:
+        return "navy"
+    if hue < 330:
+        return "pink"
+    return "red"
+
+
+def _rgb_to_lab(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
+    red, green, blue = [_srgb_to_linear(channel / 255) for channel in rgb]
+    x = red * 0.4124564 + green * 0.3575761 + blue * 0.1804375
+    y = red * 0.2126729 + green * 0.7151522 + blue * 0.0721750
+    z = red * 0.0193339 + green * 0.1191920 + blue * 0.9503041
+
+    fx = _lab_f(x / 0.95047)
+    fy = _lab_f(y)
+    fz = _lab_f(z / 1.08883)
+    return (
+        116 * fy - 16,
+        500 * (fx - fy),
+        200 * (fy - fz),
+    )
+
+
+def _srgb_to_linear(value: float) -> float:
+    if value <= 0.04045:
+        return value / 12.92
+    return ((value + 0.055) / 1.055) ** 2.4
+
+
+def _lab_f(value: float) -> float:
+    if value > 0.008856:
+        return value ** (1 / 3)
+    return 7.787 * value + 16 / 116
+
+
+def _delta_e2000(
+    lab1: tuple[float, float, float],
+    lab2: tuple[float, float, float],
+) -> float:
+    l1, a1, b1 = lab1
+    l2, a2, b2 = lab2
+    c1 = sqrt(a1 ** 2 + b1 ** 2)
+    c2 = sqrt(a2 ** 2 + b2 ** 2)
+    c_bar = (c1 + c2) / 2
+    g = 0.5 * (1 - sqrt((c_bar ** 7) / (c_bar ** 7 + 25 ** 7)))
+    a1_prime = (1 + g) * a1
+    a2_prime = (1 + g) * a2
+    c1_prime = sqrt(a1_prime ** 2 + b1 ** 2)
+    c2_prime = sqrt(a2_prime ** 2 + b2 ** 2)
+    h1_prime = _hue_degrees(a1_prime, b1)
+    h2_prime = _hue_degrees(a2_prime, b2)
+
+    delta_l_prime = l2 - l1
+    delta_c_prime = c2_prime - c1_prime
+    delta_h_prime = _delta_h_prime(c1_prime, c2_prime, h1_prime, h2_prime)
+    delta_h_term = 2 * sqrt(c1_prime * c2_prime) * sin(radians(delta_h_prime / 2))
+
+    l_bar_prime = (l1 + l2) / 2
+    c_bar_prime = (c1_prime + c2_prime) / 2
+    h_bar_prime = _mean_h_prime(c1_prime, c2_prime, h1_prime, h2_prime)
+
+    t = (
+        1
+        - 0.17 * cos(radians(h_bar_prime - 30))
+        + 0.24 * cos(radians(2 * h_bar_prime))
+        + 0.32 * cos(radians(3 * h_bar_prime + 6))
+        - 0.20 * cos(radians(4 * h_bar_prime - 63))
+    )
+    delta_theta = 30 * exp(-(((h_bar_prime - 275) / 25) ** 2))
+    r_c = 2 * sqrt((c_bar_prime ** 7) / (c_bar_prime ** 7 + 25 ** 7))
+    s_l = 1 + (0.015 * ((l_bar_prime - 50) ** 2)) / sqrt(20 + ((l_bar_prime - 50) ** 2))
+    s_c = 1 + 0.045 * c_bar_prime
+    s_h = 1 + 0.015 * c_bar_prime * t
+    r_t = -sin(radians(2 * delta_theta)) * r_c
+
+    return sqrt(
+        (delta_l_prime / s_l) ** 2
+        + (delta_c_prime / s_c) ** 2
+        + (delta_h_term / s_h) ** 2
+        + r_t * (delta_c_prime / s_c) * (delta_h_term / s_h)
+    )
+
+
+def _hue_degrees(a_value: float, b_value: float) -> float:
+    if a_value == 0 and b_value == 0:
+        return 0
+    hue = degrees(atan2(b_value, a_value))
+    return hue + 360 if hue < 0 else hue
+
+
+def _delta_h_prime(
+    c1_prime: float,
+    c2_prime: float,
+    h1_prime: float,
+    h2_prime: float,
+) -> float:
+    if c1_prime * c2_prime == 0:
+        return 0
+    diff = h2_prime - h1_prime
+    if abs(diff) <= 180:
+        return diff
+    if diff > 180:
+        return diff - 360
+    return diff + 360
+
+
+def _mean_h_prime(
+    c1_prime: float,
+    c2_prime: float,
+    h1_prime: float,
+    h2_prime: float,
+) -> float:
+    if c1_prime * c2_prime == 0:
+        return h1_prime + h2_prime
+    if abs(h1_prime - h2_prime) <= 180:
+        return (h1_prime + h2_prime) / 2
+    if h1_prime + h2_prime < 360:
+        return (h1_prime + h2_prime + 360) / 2
+    return (h1_prime + h2_prime - 360) / 2

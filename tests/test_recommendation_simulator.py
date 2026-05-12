@@ -42,3 +42,22 @@ def test_simulator_swap_recomputes_checks_from_modified_outfit():
     assert simulated_outfit.garments[2].category == "로퍼"
     assert simulated_score.overall == 100
     assert {check.id for check in simulated_checks if check.result == "fail"} == set()
+
+
+def test_a3_suggestion_targets_shoes_even_when_another_slot_is_less_formal():
+    payload = load_fixture("vision", "interview_casual")
+    context_payload = load_fixture("context", "interview_casual")
+    payload["garments"][0]["category"] = "tshirt"
+    payload["garments"][0]["formality_label"] = "casual"
+    payload["garments"][2]["formality_label"] = "formal"
+    context_payload["dress_code"]["expected_formality_range"] = [50, 95]
+    context_payload["dress_code"]["expected_categories"]["top"] = ["tshirt"]
+
+    response = build_recommendation_response(
+        VisionResponse.model_validate(payload),
+        ContextResponse.model_validate(context_payload),
+    )
+
+    assert response.suggestions
+    assert response.suggestions[0].action.target_slot == "shoes"
+    assert "A3" in response.suggestions[0].fixes_check_ids

@@ -60,3 +60,43 @@ def test_not_applicable_checks_do_not_count_in_group_score():
     assert response.checks[2].applicable is False
     assert response.score.group_scores["dresscode"] == 1.0
     assert response.score.group_scores["consistency"] == 0.5
+
+
+def test_avoid_tones_match_canonical_color_aliases():
+    payload = load_fixture("vision", "interview_good")
+    context_payload = load_fixture("context", "interview_good")
+    payload["garments"][0]["primary_color"] = {
+        "rgb": [255, 0, 0],
+        "name": "red",
+    }
+    context_payload["dress_code"]["color_guidance"]["avoid_tones"] = ["빨강"]
+
+    response = build_recommendation_response(
+        VisionResponse.model_validate(payload),
+        ContextResponse.model_validate(context_payload),
+    )
+    check = next(check for check in response.checks if check.id == "A5")
+
+    assert check.result == "fail"
+    assert "matched_avoid_tones=[red]" in check.evidence_facts
+
+
+def test_color_contrast_uses_delta_e2000_not_brightness_proxy():
+    payload = load_fixture("vision", "interview_good")
+    payload["garments"][0]["primary_color"] = {
+        "rgb": [255, 0, 0],
+        "name": "red",
+    }
+    payload["garments"][1]["primary_color"] = {
+        "rgb": [0, 255, 0],
+        "name": "green",
+    }
+
+    response = build_recommendation_response(
+        VisionResponse.model_validate(payload),
+        ContextResponse.model_validate(load_fixture("context", "interview_good")),
+    )
+    check = next(check for check in response.checks if check.id == "C1")
+
+    assert check.result == "fail"
+    assert check.evidence_facts[0] == "delta_e2000_top_bottom=87"
