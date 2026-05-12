@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_school_daily",
+  "dress_code": {
+    "event_type": "school_daily",
+    "tier": "tier1",
+    "rag_match_score": 0.85,
+    "expected_formality_range": [20, 55],
+    "expected_categories": {
+      "top": ["shirt", "knit", "tshirt", "hoodie"],
+      "bottom": ["chinos", "jeans", "shorts"],
+      "outer": ["cardigan", "coat"],
+      "shoes": ["sneakers", "loafers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "white", "beige"],
+      "avoid_tones": ["neon"]
+    },
+    "source_doc_ids": ["dresscode_school_daily_v1"],
+    "extraction_confidence": 0.84
+  },
+  "warnings": []
+}

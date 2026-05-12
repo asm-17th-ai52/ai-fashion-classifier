@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_general",
+  "dress_code": {
+    "event_type": "general",
+    "tier": "fallback_general",
+    "rag_match_score": 0.5,
+    "expected_formality_range": [30, 80],
+    "expected_categories": {
+      "top": ["shirt", "blouse", "knit", "tshirt"],
+      "bottom": ["slacks", "skirt", "chinos", "jeans"],
+      "outer": ["blazer", "cardigan", "coat"],
+      "shoes": ["dress_shoes", "loafers", "sneakers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "white", "beige"],
+      "avoid_tones": ["neon"]
+    },
+    "source_doc_ids": ["fallback_general_v1"],
+    "extraction_confidence": 0.5
+  },
+  "warnings": ["context_agent_unavailable_fallback_general"]
+}
