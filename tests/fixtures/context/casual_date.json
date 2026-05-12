@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_casual_date",
+  "dress_code": {
+    "event_type": "casual_date",
+    "tier": "tier1",
+    "rag_match_score": 0.86,
+    "expected_formality_range": [40, 70],
+    "expected_categories": {
+      "top": ["shirt", "blouse", "knit", "tshirt"],
+      "bottom": ["slacks", "skirt", "chinos", "jeans"],
+      "outer": ["blazer", "cardigan", "coat"],
+      "shoes": ["loafers", "sneakers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "white", "beige"],
+      "avoid_tones": ["neon"]
+    },
+    "source_doc_ids": ["dresscode_casual_date_v1"],
+    "extraction_confidence": 0.84
+  },
+  "warnings": []
+}

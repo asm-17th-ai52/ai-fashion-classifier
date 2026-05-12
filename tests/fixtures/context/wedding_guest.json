@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_wedding_guest",
+  "dress_code": {
+    "event_type": "wedding_guest",
+    "tier": "tier1",
+    "rag_match_score": 0.9,
+    "expected_formality_range": [70, 95],
+    "expected_categories": {
+      "top": ["shirt", "blouse", "blazer"],
+      "bottom": ["slacks", "skirt"],
+      "outer": ["blazer", "coat"],
+      "shoes": ["dress_shoes", "loafers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "beige"],
+      "avoid_tones": ["white", "red", "yellow", "neon"]
+    },
+    "source_doc_ids": ["dresscode_wedding_guest_v1"],
+    "extraction_confidence": 0.88
+  },
+  "warnings": []
+}

@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_outdoor_activity",
+  "dress_code": {
+    "event_type": "outdoor_activity",
+    "tier": "tier1",
+    "rag_match_score": 0.87,
+    "expected_formality_range": [10, 45],
+    "expected_categories": {
+      "top": ["tshirt", "knit", "hoodie"],
+      "bottom": ["chinos", "jeans", "shorts"],
+      "outer": ["cardigan", "coat"],
+      "shoes": ["sneakers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "white", "beige"],
+      "avoid_tones": []
+    },
+    "source_doc_ids": ["dresscode_outdoor_activity_v1"],
+    "extraction_confidence": 0.86
+  },
+  "warnings": []
+}

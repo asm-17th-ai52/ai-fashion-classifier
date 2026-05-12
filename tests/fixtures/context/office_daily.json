@@ -1,0 +1,22 @@
+{
+  "session_id": "sess_office_daily",
+  "dress_code": {
+    "event_type": "office_daily",
+    "tier": "tier1",
+    "rag_match_score": 0.89,
+    "expected_formality_range": [55, 80],
+    "expected_categories": {
+      "top": ["shirt", "blouse", "knit", "tshirt"],
+      "bottom": ["slacks", "skirt", "chinos"],
+      "outer": ["blazer", "cardigan", "coat"],
+      "shoes": ["dress_shoes", "loafers", "sneakers"]
+    },
+    "color_guidance": {
+      "preferred_tones": ["black", "navy", "gray", "white", "beige"],
+      "avoid_tones": ["neon"]
+    },
+    "source_doc_ids": ["dresscode_office_daily_v1"],
+    "extraction_confidence": 0.88
+  },
+  "warnings": []
+}
