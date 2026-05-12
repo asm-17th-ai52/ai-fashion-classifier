@@ -48,6 +48,11 @@ class Narration(BaseModel):
     suggestions_user_text: list[SuggestionUserText] = Field(default_factory=list)
 
 
+class NarrationResult(BaseModel):
+    narration: Narration
+    used_fallback: bool
+
+
 class NarratorClient(Protocol):
     def generate(self, payload: dict) -> Narration:
         ...
@@ -121,14 +126,23 @@ def narrate_once(
     suggestions: list[Suggestion],
     fallback_explanation: str,
     client: NarratorClient | None,
-) -> Narration:
+) -> NarrationResult:
     if client is None:
-        return rule_based_narration(fallback_explanation, suggestions)
+        return NarrationResult(
+            narration=rule_based_narration(fallback_explanation, suggestions),
+            used_fallback=True,
+        )
 
     try:
-        return client.generate(build_narrator_payload(score, checks, suggestions))
-    except (ValidationError, json.JSONDecodeError, RuntimeError, ValueError):
-        return rule_based_narration(fallback_explanation, suggestions)
+        return NarrationResult(
+            narration=client.generate(build_narrator_payload(score, checks, suggestions)),
+            used_fallback=False,
+        )
+    except Exception:
+        return NarrationResult(
+            narration=rule_based_narration(fallback_explanation, suggestions),
+            used_fallback=True,
+        )
 
 
 def validate_narration(
