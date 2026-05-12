@@ -9,11 +9,11 @@
   "garments": [
     {
       "slot": "top",
-      "category": "shirt",
+      "category": "셔츠",
       "subcategory": "button_down",
       "primary_color": {
         "rgb": [180, 180, 180],
-        "name": "gray"
+        "name": "회색"
       },
       "secondary_colors": [],
       "pattern": "solid",
@@ -25,11 +25,11 @@
     },
     {
       "slot": "bottom",
-      "category": "slacks",
+      "category": "슬랙스",
       "subcategory": "straight",
       "primary_color": {
         "rgb": [75, 75, 75],
-        "name": "gray"
+        "name": "회색"
       },
       "secondary_colors": [],
       "pattern": "solid",
@@ -41,11 +41,11 @@
     },
     {
       "slot": "shoes",
-      "category": "loafers",
+      "category": "로퍼",
       "subcategory": "leather",
       "primary_color": {
         "rgb": [30, 30, 30],
-        "name": "black"
+        "name": "검정"
       },
       "secondary_colors": [],
       "pattern": "solid",

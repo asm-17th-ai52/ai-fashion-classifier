@@ -19,8 +19,11 @@
       "label": "상의 카테고리가 기대 범위에 포함",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["expected top categories=[shirt, blouse, blazer]", "current top category=shirt"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "expected top categories=[셔츠, 블라우스]",
+        "current top category=셔츠"
+      ]
     },
     {
       "id": "A2",
@@ -28,8 +31,11 @@
       "label": "하의 카테고리가 기대 범위에 포함",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["expected bottom categories=[slacks, skirt]", "current bottom category=slacks"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "expected bottom categories=[슬랙스, 치마]",
+        "current bottom category=슬랙스"
+      ]
     },
     {
       "id": "A3",
@@ -37,8 +43,11 @@
       "label": "신발 카테고리가 기대 범위에 포함",
       "result": "fail",
       "applicable": true,
-      "evidence_facts": ["expected shoes categories=[dress_shoes, loafers]", "current shoes category=sneakers"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "expected shoes categories=[구두, 로퍼]",
+        "current shoes category=스니커즈"
+      ]
     },
     {
       "id": "A4",
@@ -46,8 +55,11 @@
       "label": "평균 포멀니스가 기대 범위 안에 위치",
       "result": "fail",
       "applicable": true,
-      "evidence_facts": ["expected_formality_range=[70, 95]", "outfit_formality_avg=63"],
-      "is_blocker": true
+      "is_blocker": true,
+      "evidence_facts": [
+        "expected_formality_range=[70, 95]",
+        "outfit_formality_avg=63"
+      ]
     },
     {
       "id": "A5",
@@ -55,8 +67,11 @@
       "label": "피해야 할 색상 톤이 없음",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["avoid_tones=[red, yellow, neon]", "matched_avoid_tones=[]"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "avoid_tones=[빨강, 노랑, 핑크, 코랄, 연두, 주황]",
+        "matched_avoid_tones=[]"
+      ]
     },
     {
       "id": "B1",
@@ -64,8 +79,11 @@
       "label": "포멀니스 편차가 기준 이하",
       "result": "fail",
       "applicable": true,
-      "evidence_facts": ["formality_values=[85, 85, 20]", "formality_std=31"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "formality_values=[85, 85, 20]",
+        "formality_std=31"
+      ]
     },
     {
       "id": "B2",
@@ -73,8 +91,10 @@
       "label": "상의 슬롯이 하나만 존재",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["top_slot_count=1"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "top_slot_count=1"
+      ]
     },
     {
       "id": "B3",
@@ -82,8 +102,11 @@
       "label": "필수 슬롯이 모두 존재",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["required_slots=[top, bottom, shoes]", "missing_slots=[]"],
-      "is_blocker": true
+      "is_blocker": true,
+      "evidence_facts": [
+        "required_slots=[top, bottom, shoes]",
+        "missing_slots=[]"
+      ]
     },
     {
       "id": "C1",
@@ -91,8 +114,11 @@
       "label": "상의와 하의 색상 대비가 적정 범위",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["delta_e2000_top_bottom=28", "expected_delta_e2000_range=[10, 50]"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "delta_e2000_top_bottom=28",
+        "expected_delta_e2000_range=[10, 50]"
+      ]
     },
     {
       "id": "C2",
@@ -100,8 +126,11 @@
       "label": "강한 채도 색상이 과하지 않음",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["strong_color_count=0", "max_allowed=1"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "strong_color_count=0",
+        "max_allowed=1"
+      ]
     },
     {
       "id": "C3",
@@ -109,8 +138,11 @@
       "label": "명도 다양성이 적정 범위",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["value_std=27", "expected_value_std_range=[10, 60]"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "value_std=27",
+        "expected_value_std_range=[10, 60]"
+      ]
     },
     {
       "id": "D1",
@@ -118,8 +150,11 @@
       "label": "Vision 평균 신뢰도가 기준 이상",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["vision_avg_confidence=0.89", "minimum=0.6"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "vision_avg_confidence=0.89",
+        "minimum=0.6"
+      ]
     },
     {
       "id": "D2",
@@ -127,23 +162,32 @@
       "label": "드레스코드 해석 신뢰도가 기준 이상",
       "result": "pass",
       "applicable": true,
-      "evidence_facts": ["tier=tier1", "extraction_confidence=0.9"],
-      "is_blocker": false
+      "is_blocker": false,
+      "evidence_facts": [
+        "tier=tier1",
+        "extraction_confidence=0.9"
+      ]
     }
   ],
-  "blockers_failed": ["A4"],
+  "blockers_failed": [
+    "A4"
+  ],
   "suggestions": [
     {
       "id": "sg_1",
-      "fixes_check_ids": ["A3", "A4", "B1"],
+      "fixes_check_ids": [
+        "A3",
+        "A4",
+        "B1"
+      ],
       "action": {
         "type": "swap",
         "target_slot": "shoes",
-        "from": "sneakers (formality=20)",
-        "to": "loafers (formality>=65)"
+        "from": "스니커즈 (formality=20)",
+        "to": "로퍼 (formality>=65)"
       },
       "rationale_facts": [
-        "expected shoes categories=[dress_shoes, loafers]",
+        "expected shoes categories=[구두, 로퍼]",
         "swapping shoes raises outfit_formality_avg from 63 to 78",
         "swapping shoes lowers formality_std from 31 to 9"
       ],
