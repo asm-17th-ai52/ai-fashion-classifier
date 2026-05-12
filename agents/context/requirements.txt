@@ -1,0 +1,11 @@
+# Context Agent 의존성 (PR-A: 데이터 모델 + 정적 코퍼스 단계).
+#
+# PR-B (FAISS 정적 RAG) 에서 sentence-transformers / faiss-cpu /
+#   langchain-huggingface 추가 예정.
+# PR-C (Tier-2 ReAct 도구) 에서 tavily-python / httpx / trafilatura 등 추가 예정.
+#
+# 본 파일은 Context Agent 단독 개발/테스트용이며, 프로덕션 배포 시에는
+# 백엔드 담당자가 api/requirements.txt 에도 동일 핀을 반영해야 한다.
+
+python-frontmatter>=1.0
+pydantic>=2.0
