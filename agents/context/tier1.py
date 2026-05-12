@@ -78,7 +78,16 @@ def _store() -> FAISS:
 
     ``allow_dangerous_deserialization=True`` 는 langchain 의 pickle 기반 메타데이터
     역직렬화를 허용하는 플래그다. 인덱스는 본 repo 가 직접 빌드/커밋하므로 신뢰 OK.
+
+    인덱스 파일이 없을 때 (예: 신규 환경, 인덱스 파일 누락) 는 즉시 actionable
+    error 를 raise — pickle 디시리얼라이저의 모호한 stack trace 보다 빌드 명령
+    안내가 훨씬 유용하다.
     """
+    if not (INDEX_PATH / "index.faiss").exists() or not (INDEX_PATH / "index.pkl").exists():
+        raise RuntimeError(
+            f"FAISS index not found at {INDEX_PATH}. "
+            f"Run: python -m agents.context.tier1 build"
+        )
     emb = build_embedder()
     return FAISS.load_local(
         str(INDEX_PATH),
@@ -153,7 +162,11 @@ def _build_page_content(meta: dict[str, Any], body: str) -> str:
 
 
 def _load_corpus_documents() -> list:
-    """``static/*.md`` 9 건을 langchain Document 리스트로 로드한다."""
+    """``static/*.md`` 9 건을 langchain Document 리스트로 로드한다.
+
+    빌드 타임 검증: ``event_type`` 키는 retrieve 결과 dict 의 식별자이므로
+    누락 시 즉시 raise — pickle 시점에 묻혀버리지 않도록 명시적으로 막는다.
+    """
     import frontmatter  # type: ignore[import-untyped]
     from langchain_core.documents import Document
 
@@ -163,6 +176,11 @@ def _load_corpus_documents() -> list:
             continue
         post = frontmatter.load(path)
         meta = dict(post.metadata)
+        if "event_type" not in meta:
+            raise ValueError(
+                f"Corpus document {path.name} is missing required 'event_type' "
+                f"frontmatter key — Tier-1 retrieve depends on this slug."
+            )
         # `curated_at` 가 date 객체로 로드되어 FAISS 저장 시 직렬화 문제를 일으킬 수
         # 있어 ISO 문자열로 평탄화한다.
         if "curated_at" in meta and not isinstance(meta["curated_at"], str):
