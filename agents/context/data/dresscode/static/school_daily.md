@@ -11,7 +11,7 @@ color_guidance:
   avoid_tones: []
 source: hand_curated
 curated_at: 2026-05-12
-aliases: [학교, 캠퍼스, 캠퍼스룩, 등교, 대학생, 자율복, school, campus, school daily]
+aliases: [학교, 대학교, 학과, 캠퍼스, 캠퍼스룩, 등교, 대학생, 자율복, school, campus, school daily]
 ---
 
 # 학교 일상 (School Daily) 드레스코드

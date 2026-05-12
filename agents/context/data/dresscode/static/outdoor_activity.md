@@ -11,7 +11,7 @@ color_guidance:
   avoid_tones: []
 source: hand_curated
 curated_at: 2026-05-12
-aliases: [등산, 야외활동, 아웃도어, 캠핑, 트레킹, 산책, 하이킹, outdoor, hiking, camping]
+aliases: [등산, 등산복, 야외활동, 아웃도어, 캠핑, 트레킹, 산책, 하이킹, outdoor, hiking, camping]
 ---
 
 # 야외 활동 (Outdoor Activity) 드레스코드

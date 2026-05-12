@@ -11,7 +11,7 @@ color_guidance:
   avoid_tones: [빨강, 노랑, 핑크, 코랄, 연두]
 source: hand_curated
 curated_at: 2026-05-12
-aliases: [발표, 프레젠테이션, 피티, PT, 강의, 세미나, 학회발표, presentation, talk]
+aliases: [발표, 프레젠테이션, 피티, 발표PT, 강의, 세미나, 학회발표, presentation, talk]
 ---
 
 # 발표 (Presentation) 드레스코드

@@ -25,14 +25,14 @@ Vision Agent에서 학습한 교훈: google-genai의 structured output은 다음
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 # 외부에 노출되는 응답 schema는 backend에 이미 정의되어 있다.
 # 본 Agent는 동일 schema 인스턴스를 다시 정의하지 않고 그대로 import한다.
 # (07-data-contracts.md §3 단일 출처 유지.)
-from api.app.schemas.context import DressCode, EvidenceQuote  # noqa: F401  (re-export 의도)
+from api.app.schemas.context import DressCode, EvidenceQuote
 from api.app.schemas.session import SessionCreateRequest
 
 
@@ -171,7 +171,7 @@ class ContextState(BaseModel):
     fetched_pages: list[FetchedPage] = Field(default_factory=list)
     extracted_facts_per_source: list[ExtractedFacts] = Field(default_factory=list)
     tier2_consensus: Optional[DressCode] = None
-    tier2_meta: dict = Field(default_factory=dict)
+    tier2_meta: dict[str, Any] = Field(default_factory=dict)
 
     # Tier-2 비용/속도 카운터 (spec §6.8)
     web_search_calls: int = 0
