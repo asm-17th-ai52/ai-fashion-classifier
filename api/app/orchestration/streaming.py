@@ -20,39 +20,6 @@ from typing import Any, Iterator, Optional
 # Per-slot progress percentages for vlm_extract_all garment fan-out. The
 # numbers anchor the spec §4.2 example (top → 20, shoes → 28).
 _GARMENT_SLOT_PCT = {"top": 20, "outer": 24, "bottom": 26, "shoes": 28, "bag": 30, "watch": 31}
-
-_NODE_TO_AGENT: dict[str, str] = {
-    # super-graph
-    "preprocess": "vision",
-    "vision": "vision",
-    "context": "context",
-    "recommendation": "recommendation",
-    "pack_response": "recommendation",
-    # vision sub-graph (02-agent-vision-spec.md §11)
-    "validate_image": "vision",
-    "vlm_extract_all": "vision",
-    "overwrite_colors": "vision",
-    "run_verifiers": "vision",
-    "vlm_extract_targeted": "vision",
-    "critic_llm": "vision",
-    # context sub-graph (03-agent-context-spec.md §10)
-    "tier1_retrieve": "context",
-    "decide_tier": "context",
-    "tier2_plan_query": "context",
-    "tier2_web_search": "context",
-    "tier2_fetch_pages": "context",
-    "tier2_extract_facts": "context",
-    "tier2_consensus": "context",
-    "tier2_promotion_enqueue": "context",
-    "pack_context": "context",
-    # recommendation sub-graph (04-agent-recommendation-spec.md §10)
-    "evaluate_checks": "recommendation",
-    "compute_score": "recommendation",
-    "generate_candidates": "recommendation",
-    "simulate_and_filter": "recommendation",
-    "narrate": "recommendation",
-    "safety_filter": "recommendation",
-}
 _GARMENT_SLOT_LABEL_KO = {
     "top": "상의",
     "outer": "아우터",
@@ -100,15 +67,6 @@ _SUB_NODES_FIXED = {
 }
 
 
-# Each agent's global-pct range → used to compute per-agent 0-100 pct independently.
-_AGENT_STAGE_RANGE: dict[str, tuple[int, int]] = {
-    "vision":         (0,  35),
-    "context":        (35, 65),
-    "recommendation": (65, 100),
-    "system":         (0,  100),
-}
-
-
 def _output_get(output: Any, name: str, default: Any = None) -> Any:
     if output is None:
         return default
@@ -124,7 +82,6 @@ class EventMapper:
         self._emitted_keys: set[tuple[str, str]] = set()
         self._garments_announced: set[str] = set()
         self._last_pct = 0
-        self._last_agent_raw_pct: dict[str, int] = {}  # per-agent raw pct (before global clamp)
 
     def map(self, event: dict) -> Iterator[dict]:
         """Yield zero or more SSE event dicts for one LangGraph event."""
@@ -136,7 +93,6 @@ class EventMapper:
         key = (kind, name)
         # Sub-graph fine-grained events take precedence when available.
         fixed = _SUB_NODES_FIXED.get(key) or _SUPER_NODES.get(key)
-        node_agent = _NODE_TO_AGENT.get(name, "system")
 
         # Special: emit per-slot garment messages as vlm_extract_all ends.
         if kind == "on_chain_end" and name == "vlm_extract_all":
@@ -153,7 +109,7 @@ class EventMapper:
                 if tier == "tier2_live"
                 else "드레스코드 기준을 찾았어요"
             )
-            sse = self._progress(48, msg, dedup_key=("decide_tier_msg", str(tier)), agent="context")
+            sse = self._progress(48, msg, dedup_key=("decide_tier_msg", str(tier)))
             if sse:
                 yield sse
 
@@ -166,7 +122,6 @@ class EventMapper:
                 53,
                 f"관련 자료 {n}건을 찾았어요",
                 dedup_key=("tier2_web_search", str(n)),
-                agent="context",
             )
             if sse:
                 yield sse
@@ -180,13 +135,13 @@ class EventMapper:
                 msg = f"오늘 날씨 정보를 가져왔어요 · {temp}°C"
             else:
                 msg = "상황 컨텍스트 준비 완료"
-            sse = self._progress(63, msg, dedup_key=("pack_context_msg",), agent="context")
+            sse = self._progress(63, msg, dedup_key=("pack_context_msg",))
             if sse:
                 yield sse
 
         if fixed is not None:
             pct, message = fixed
-            sse = self._progress(pct, message, dedup_key=key, agent=node_agent)
+            sse = self._progress(pct, message, dedup_key=key)
             if sse:
                 yield sse
 
@@ -213,31 +168,20 @@ class EventMapper:
                 pct,
                 f"{label}: {tail}",
                 dedup_key=("garment", slot_value),
-                agent="vision",
             )
             if sse:
                 yield sse
 
     def _progress(
-        self, pct: int, message: str, *, dedup_key: tuple, agent: str = "system"
+        self, pct: int, message: str, *, dedup_key: tuple
     ) -> Optional[dict]:
         if dedup_key in self._emitted_keys:
             return None
         self._emitted_keys.add(dedup_key)
-
-        # Per-agent 0-100%: use original pct (before global clamp) so parallel agents
-        # don't pollute each other's progress.
-        start, end = _AGENT_STAGE_RANGE.get(agent, (0, 100))
-        prev_raw = self._last_agent_raw_pct.get(agent, start)
-        agent_raw = max(pct, prev_raw)
-        self._last_agent_raw_pct[agent] = agent_raw
-        agent_pct = max(0, min(100, round((agent_raw - start) / (end - start) * 100))) if end > start else 0
-
-        # Global pct: monotonically non-decreasing for the overall progress bar.
+        # pct must be monotonically non-decreasing for a clean progressbar.
         pct = max(pct, self._last_pct)
         self._last_pct = pct
-
-        return {"type": "progress", "pct": pct, "agent_pct": agent_pct, "message": message, "agent": agent}
+        return {"type": "progress", "pct": pct, "message": message}
 
 
 def map_langgraph_event(event: dict, mapper: EventMapper) -> list[dict]:
