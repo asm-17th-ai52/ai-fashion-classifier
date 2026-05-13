@@ -7,17 +7,16 @@ LLM 에 structured output schema 를 강제하고, 추출 결과의 ``evidence_q
 """
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from agents.context.forbidden_terms import CONTEXT_FORBIDDEN_TERMS
 from agents.context.prompts import EXTRACTOR_SYSTEM, build_extractor_user
 from agents.context.state import ContextState, ExtractedFacts, FetchedPage
-from agents.recommendation.narrator import FORBIDDEN_TERMS
-from agents.vision.nodes.step1_nodes import GEMINI_MODEL
+from agents.vision.nodes.step1_nodes import GEMINI_MODEL, _build_client
 
 
 # ---------------------------------------------------------------------------
@@ -66,22 +65,15 @@ _MAX_BODY_CHARS = 50_000
 _RECENT_PAGES = 5
 
 
-def _build_client() -> genai.Client:
-    """``GOOGLE_API_KEY`` 미설정 시 ``EnvironmentError`` raise."""
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        raise EnvironmentError("GOOGLE_API_KEY 환경변수가 설정되지 않았습니다.")
-    return genai.Client(api_key=api_key)
-
-
 def _quotes_contain_forbidden(facts: ExtractedFacts) -> bool:
     """``evidence_quotes`` 의 어떤 인용에 §4.1 금지어가 포함됐는지 검사.
 
     enum / numeric 필드 (categories, color_guidance, formality_range) 는 schema 제약상
-    한국어 자유 문장이 아니므로 검사 대상에서 제외.
+    한국어 자유 문장이 아니므로 검사 대상에서 제외. 단어 리스트는
+    ``forbidden_terms.CONTEXT_FORBIDDEN_TERMS`` — Recommendation 기본 + Context 특화.
     """
     joined = " ".join(q.quote for q in facts.evidence_quotes)
-    return any(term in joined for term in FORBIDDEN_TERMS)
+    return any(term in joined for term in CONTEXT_FORBIDDEN_TERMS)
 
 
 def _llm_to_facts(llm: _ExtractedFactsLLM) -> ExtractedFacts:
@@ -136,6 +128,7 @@ def node_tier2_extract_facts(state: ContextState) -> dict:
     try:
         client = _build_client()
     except EnvironmentError as exc:
+        # vision 의 ``_build_client`` 는 키 미설정 시 ``EnvironmentError`` raise.
         warnings.append(f"extract_facts_no_api_key: {exc}")
         return {"warnings": state.warnings + warnings}
 
