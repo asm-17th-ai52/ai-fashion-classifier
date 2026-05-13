@@ -1,25 +1,32 @@
 # Context Agent 의존성.
 #
-# PR-A: python-frontmatter / pydantic (모델 + 정적 코퍼스)
-# PR-B: sentence-transformers / faiss-cpu / langchain-huggingface / langchain-community (Tier-1 FAISS RAG)
-# PR-D: google-genai (Tier-2 ReAct LLM 노드 — plan_query / extract_facts). Vision Agent 가 이미 사용 중인 키 (GOOGLE_API_KEY) 재사용.
-# PR-C 예정: tavily-python / httpx / trafilatura 등 (Tier-2 ReAct 도구)
-#
 # 본 파일은 Context Agent 단독 개발/테스트용이며, 프로덕션 배포 시에는
 # 백엔드 담당자가 api/requirements.txt 에도 동일 핀을 반영해야 한다.
 
 python-frontmatter>=1.0
 pydantic>=2.0
 
-# Tier-2 ReAct LLM 노드 (PR-D). Vision Agent 가 이미 동일 키 사용 중.
+# Tier-2 ReAct LLM 노드 (Gemini structured output). Vision Agent 가 이미 동일 키 사용.
 google-genai>=1.0
 
-# Tier-1 정적 RAG (PR-B).
+# Tier-1 정적 RAG.
 #
-# 호환성 메모: 본 repo의 langgraph 1.x 는 langchain-core 1.x 를 요구하므로
+# 호환성 메모: 본 repo 의 langgraph 1.x 는 langchain-core 1.x 를 요구하므로
 # langchain-community / langchain-huggingface 도 1.x 계열로 맞춘다.
-# (Phase 2 리서치 당시 권고된 0.3.x 핀은 langgraph 1.x 와 충돌해 폐기.)
 sentence-transformers>=3.0,<4
 faiss-cpu>=1.8,<2
 langchain-huggingface>=1.2.2,<2
 langchain-community>=0.4.1,<1
+
+# Tier-2 ReAct 도구.
+#
+# numpy<2 핀: trafilatura[all] 의 트랜지티브 py3langid 가 numpy>=2 를 요구하지만,
+# faiss-cpu 1.8 / sentence-transformers 가 numpy 1.x 로 컴파일돼 있어 충돌. 후자 우선.
+# 실측 결과 trafilatura 본문 추출은 numpy 1.x 에서도 정상 작동.
+numpy<2
+tavily-python>=0.5.0
+httpx>=0.27
+trafilatura[all]>=2.0
+# youtube-transcript-api 는 YouTube 스크래핑에 의존하므로 minor 업데이트로도 깨질
+# 위험. upper bound 명시.
+youtube-transcript-api>=1.0,<2
