@@ -19,8 +19,8 @@ Recommendation Agent 가 의류 평가 시 사용한다.
 
 | PR | 산출물 |
 |---|---|
-| **PR-A (본 PR)** | `state.py` (Pydantic 모델), `data/dresscode/static/*.md × 9` (정적 코퍼스) |
-| PR-B | FAISS 인덱스 빌드 스크립트 + Tier-1 retrieve 노드 |
+| PR-A | `state.py` (Pydantic 모델), `data/dresscode/static/*.md × 9` (정적 코퍼스) |
+| PR-B | `embedder.py` + `tier1.py` (`tier1_retrieve` / `is_tier1_match` + 인라인 build CLI) + 사전 빌드 FAISS 인덱스 |
 | PR-C | Tier-2 ReAct 도구 (`web_search`, `fetch_page`, `extract_facts`) |
 | PR-D | Tier-2 합의(consensus) + 승격 큐 노드 |
 | PR-E | LangGraph 조립 + `context_subgraph` export → backend selector 연결 |
@@ -30,11 +30,15 @@ Recommendation Agent 가 의류 평가 시 사용한다.
 > `api/app/agents_stub/__init__.py` 의 selector 는 PR-E 머지 전까지
 > 기존 stub 으로 폴백한다 (회귀 위험 0).
 
-## 설치 (PR-A 기준)
+## 설치
 
 ```bash
 pip install -r agents/context/requirements.txt
 ```
+
+PR-B 기준 의존성: `python-frontmatter`, `pydantic`, `sentence-transformers`,
+`faiss-cpu`, `langchain-huggingface`, `langchain-community`. PR-C 에서 Tier-2 도구
+관련 (`tavily-python`, `httpx`, `trafilatura` 등) 가 추가될 예정이다.
 
 > 프로덕션 배포 시에는 backend 담당자가 동일 의존성을 `api/requirements.txt` 에도
 > 반영해야 한다 (현 PR 범위 밖, PR-E 검토 시점에 합의 예정).
@@ -53,7 +57,7 @@ pip install -r agents/context/requirements.txt
 - 정적 RAG 코퍼스: `data/dresscode/static/*.md` (9개 event_type, YAML frontmatter + Korean body).
   - vocab 은 `agents/vision/tools/color_lookup.py` 의 `_COLOR_TABLE` 기준.
   - schema 는 `data/dresscode/static/README.md` 참조.
-- 사전 빌드 FAISS 인덱스(예정): `data/dresscode/faiss_index/`
-- 인덱스 재빌드(예정): `python -m agents.context.scripts.build_faiss_index`
+- 사전 빌드 FAISS 인덱스: `data/dresscode/faiss_index/` (PR-B 부터 repo 에 커밋)
+- 인덱스 재빌드: `python -m agents.context.tier1 build` (인라인 CLI, `_build_index` 호출)
 
-> FAISS 인덱스 빌드/로드 코드는 PR-B 에서 추가된다.
+> FAISS 인덱스 빌드/로드 코드는 PR-B (`tier1.py`) 에서 추가됨.
