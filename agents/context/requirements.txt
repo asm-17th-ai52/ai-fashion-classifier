@@ -2,7 +2,7 @@
 #
 # PR-A: python-frontmatter / pydantic (모델 + 정적 코퍼스)
 # PR-B: sentence-transformers / faiss-cpu / langchain-huggingface / langchain-community (Tier-1 FAISS RAG)
-# PR-C 예정: tavily-python / httpx / trafilatura 등 (Tier-2 ReAct 도구)
+# PR-C: tavily-python / httpx / trafilatura / youtube-transcript-api / tenacity (Tier-2 ReAct 도구)
 #
 # 본 파일은 Context Agent 단독 개발/테스트용이며, 프로덕션 배포 시에는
 # 백엔드 담당자가 api/requirements.txt 에도 동일 핀을 반영해야 한다.
@@ -19,3 +19,18 @@ sentence-transformers>=3.0,<4
 faiss-cpu>=1.8,<2
 langchain-huggingface>=1.2.2,<2
 langchain-community>=0.4.1,<1
+
+# Tier-2 ReAct 도구 (PR-C).
+#
+# numpy<2 핀 메모: trafilatura[all] 의 트랜지티브 py3langid 가 numpy>=2 를 요구하지만,
+# faiss-cpu 1.8 / sentence-transformers 가 numpy 1.x 로 컴파일돼 있어 충돌. 후자 우선.
+# 실측 결과 trafilatura 본문 추출은 numpy 1.x 에서도 정상 작동.
+numpy<2
+tavily-python>=0.5.0
+httpx>=0.27
+trafilatura[all]>=2.0
+# youtube-transcript-api 는 YouTube 스크래핑에 의존하므로 minor 업데이트로도 깨질
+# 위험. upper bound 를 명시해 unexpected 업그레이드 방지.
+youtube-transcript-api>=1.0,<2
+# tenacity 는 PR-D 의 ReAct 루프 retry 정책에서 사용 예정. PR-C 자체에선 미사용이라
+# 활성 의존성에서 일단 제외 (필요 시 PR-D 가 본 파일에 추가).
