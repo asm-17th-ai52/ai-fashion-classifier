@@ -32,8 +32,10 @@ from agents.context.nodes.pack_context import _general_fallback
 from agents.context.state import ContextState
 
 
-# 1 s margin: pack_context 노드가 깔끔하게 종료할 여유.
-_HARD_TIMEOUT_SECONDS: float = TIER2_TIMEOUT_SECONDS + 1.0
+# Adapter wall budget = Tier-2 12 s + 3 s Tier-1 retrieve / pack 버퍼.
+# spec §6.8 의 Tier-2 12 s 상한은 sub-graph 내부 ``latency_exceeded`` 가 책임지지만,
+# LangGraph 1.x Pydantic dict 머지 quirk 로 미발동 케이스가 있어 외부 hard cap 추가.
+_HARD_TIMEOUT_SECONDS: float = TIER2_TIMEOUT_SECONDS + 3.0
 
 
 def _state_get(state: Any, key: str, default: Any = None) -> Any:
@@ -67,10 +69,7 @@ def _make_timeout_response(
         "context": ContextResponse(
             session_id=session_id,
             dress_code=fallback,
-            warnings=[
-                "context_subgraph_hard_timeout: "
-                f"{_HARD_TIMEOUT_SECONDS:.1f}s budget exceeded — general fallback"
-            ],
+            warnings=["tier2_timeout"],
         ),
         "agent_latencies_ms": {
             "context": elapsed_ms,

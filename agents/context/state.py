@@ -165,7 +165,9 @@ class ContextState(BaseModel):
     tier1_score: float = 0.0
 
     # ── Tier-2 ReAct 상태 ───────────────────────────────────────
-    tier2_active: bool = False
+    # TODO(post-demo): tier2_started_at 을 top-level scalar 필드로 승격하여 LangGraph 의
+    # dict-field merge ambiguity 를 제거. 현재는 ``tier2_meta[tier2_started_at]`` 로
+    # 두지만 adapter level hard timeout 이 안전망 역할 (Option B per PR-E review).
     react_step: int = 0
     search_queries_used: list[str] = Field(default_factory=list)
     fetched_pages: list[FetchedPage] = Field(default_factory=list)

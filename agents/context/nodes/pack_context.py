@@ -12,7 +12,6 @@ adapter 가 ``state.dress_code`` 를 꺼내 ``ContextResponse`` 로 감싼다.
 """
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from api.app.schemas.context import (
@@ -24,7 +23,6 @@ from api.app.schemas.context import (
 )
 from api.app.schemas.enums import DressCodeTier
 
-from agents.context.latency import _TIER2_START_KEY  # type: ignore[attr-defined]
 from agents.context.state import ContextState
 
 
@@ -82,18 +80,14 @@ def _finalize_tier2(state: ContextState) -> DressCode:
     source_doc_ids = list(dict.fromkeys(search_urls))[:5]
 
     # live_research_meta: spec §7.1.
-    # latency_ms 는 ``tier2_web_search`` 가 첫 진입 시 기록한 ``tier2_started_at`` 으로
-    # 부터 지금까지의 경과. 시작 시각이 없으면 0 (Tier-2 ReAct 가 실제로 안 돌았다는 뜻).
-    started = (state.tier2_meta or {}).get(_TIER2_START_KEY)
-    if started is not None:
-        latency_ms = int((time.monotonic() - float(started)) * 1000)
-    else:
-        latency_ms = 0
+    # latency_ms 는 본 노드에서 측정할 신뢰할 만한 sub-graph 진입 시각이 없어 0 으로 둠.
+    # 진짜 측정값은 adapter 가 ``agent_latencies_ms["context"]`` / ``["context_tier2"]``
+    # 에 채워 super-graph 로 전달한다. 본 필드는 LiveResearchMeta 스키마 호환용.
     meta = LiveResearchMeta(
         search_queries_used=list(state.search_queries_used),
         sources_count=len(state.extracted_facts_per_source),
         react_steps=state.react_step,
-        latency_ms=latency_ms,
+        latency_ms=0,
     )
 
     return DressCode(

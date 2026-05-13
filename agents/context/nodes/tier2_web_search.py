@@ -44,7 +44,6 @@ def node_tier2_web_search(state: ContextState) -> dict[str, Any]:
 
     return {
         "web_search_calls": state.web_search_calls + 1,
-        "tier2_active": True,
         "tier2_meta": meta,
         "warnings": new_warnings,
     }
