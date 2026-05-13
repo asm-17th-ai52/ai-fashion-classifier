@@ -30,3 +30,5 @@ htmlcov/
 
 # Context Agent Tier-2 비용 카운터 (runtime 데이터, 절대 commit 금지)
 agents/context/data/tier2_budget.json
+# Context Agent Tier-2 승격(promotion) 큐 (사람 검수 대기, 절대 commit 금지)
+agents/context/data/dresscode/promotion_queue.jsonl

@@ -11,7 +11,18 @@ Context Agent 테스트 공용 fixture.
 from __future__ import annotations
 
 import pathlib
+import sys
 from typing import Any
+
+# ``agents/context/state.py`` 와 어댑터/노드들이 ``from app.schemas...`` 로 import.
+# pytest 를 ``PYTHONPATH`` 없이 (예: 단일 명령 ``pytest agents/context/tests/``) 돌렸을 때도
+# 그 import 가 성공하도록 ``api/`` 디렉토리를 sys.path 에 보강한다.
+# 본 파일 경로: ``agents/context/tests/conftest.py`` → parents[2] = repo root → / "api".
+_API_ROOT = pathlib.Path(__file__).resolve().parents[2] / "api"
+if _API_ROOT.is_dir():
+    api_str = str(_API_ROOT)
+    if api_str not in sys.path:
+        sys.path.insert(0, api_str)
 
 import pytest
 from langchain_core.embeddings import Embeddings
