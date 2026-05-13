@@ -2,7 +2,8 @@
 Tavily Web Search 도구.
 
 스펙 §6.2 의 ``web_search`` 도구 구현. raw ``TavilyClient`` 를 사용하고 LangChain
-wrapper 는 거치지 않음 (PR-B 에서 langchain 호환 quirk 경험 — 직접 호출이 안전).
+wrapper 는 거치지 않음 — langchain 의 Tavily integration 은 버전별 schema 차이가
+있어 SDK 직접 호출이 안정적.
 
 설계:
 - API 키는 ``TAVILY_API_KEY`` env 에서 읽음. 누락 시 warning 반환 (예외 X).
