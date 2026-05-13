@@ -24,6 +24,7 @@ from app.schemas.context import (
 from app.schemas.enums import DressCodeTier
 
 from agents.context.state import ContextState
+from agents.context.tier1 import THRESHOLD as TIER1_THRESHOLD
 
 
 def _general_fallback() -> DressCode:
@@ -108,11 +109,14 @@ def node_pack_context(state: ContextState) -> dict[str, Any]:
     """state 의 분기 결과 → 최종 DressCode (state.dress_code) 로 통합."""
     if state.tier2_consensus is not None:
         dress_code = _finalize_tier2(state)
-    elif state.tier1_result is not None:
-        # Tier-1 hit: 이미 retrieve 노드가 정식 DressCode 로 만들어 둠.
+    elif state.tier1_result is not None and state.tier1_score >= TIER1_THRESHOLD:
+        # Tier-1 hit (score >= threshold): retrieve 노드가 정식 DressCode 로 만들어 둠.
+        # ``tier1_result`` 가 채워졌어도 score 가 임계값 미만이면 weak match — spec §6.1
+        # 의도대로 general fallback 으로 라우팅. (예: allow_live_research=False 인 custom
+        # event_type 이 Tier-2 차단되어 약매칭 Tier-1 노출되던 design quirk 회피.)
         dress_code = state.tier1_result
     else:
-        # fallback_general 분기 또는 tier-2 abort with no consensus.
+        # fallback_general 분기, Tier-2 abort with no consensus, 또는 weak Tier-1 match.
         dress_code = _general_fallback()
 
     # 최종 안전망: rag_match_score / extraction_confidence clamp.
