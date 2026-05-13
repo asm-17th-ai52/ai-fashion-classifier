@@ -12,8 +12,8 @@ Tier-1 정적 RAG: 사전 빌드된 FAISS 인덱스에서 드레스코드 문서
   는 본 모델/인덱스 조합에서 점수가 사실상 반전되어 나오는 known issue 가 있어 사용하지 않음.
 - 임계값: 0.6 — spec ``docs/specs/03-agent-context-spec.md`` §5.2 / §6.1 그대로.
 
-본 파일은 **순수 검색 함수**만 제공한다. LangGraph 노드 래핑(``node_tier1_retrieve``)은
-PR-E 의 graph 조립 단계에서 ``ContextState`` 를 다루며 본 모듈을 호출한다.
+본 파일은 **순수 검색 함수**만 제공한다. LangGraph 노드 래핑은 ``nodes/tier1_retrieve_node.py``
+에서 ``ContextState`` 를 다루며 본 모듈을 호출한다.
 
 사용:
 
@@ -128,7 +128,7 @@ def is_tier1_match(
 ) -> bool:
     """Tier-1 결과 채택 가능 여부 판정 (순수 함수, state 없음).
 
-    PR-E 의 ``decide_dresscode_tier`` 분기에서 본 헬퍼를 호출한다.
+    ``nodes/decide_tier.decide_dresscode_tier`` 분기 함수가 본 헬퍼를 호출한다.
 
     Rules (spec §6.1):
     1. 사용자 정의 event_type 이면 무조건 Tier-2 검토 (False).
@@ -196,7 +196,7 @@ def _build_index() -> None:
     docs = _load_corpus_documents()
     if not docs:
         raise RuntimeError(
-            f"No markdown corpus found under {STATIC_DIR}. PR-A 코퍼스가 누락된 상태입니다."
+            f"No markdown corpus found under {STATIC_DIR}. 정적 코퍼스가 누락된 상태입니다."
         )
     emb = build_embedder()
     # 기본 L2 거리 사용 (``_l2_to_cosine`` 로 cosine 환산).

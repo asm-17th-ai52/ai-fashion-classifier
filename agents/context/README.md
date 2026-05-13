@@ -13,22 +13,24 @@ Recommendation Agent 가 의류 평가 시 사용한다.
 자세한 사양은 [`docs/specs/03-agent-context-spec.md`](../../docs/specs/03-agent-context-spec.md)
 및 [`docs/specs/07-data-contracts.md`](../../docs/specs/07-data-contracts.md) §3 참조.
 
-## PR 단계
+## 구성
 
-본 디렉터리는 다음과 같이 점진적으로 채워진다.
-
-| PR | 산출물 |
+| 파일/디렉터리 | 역할 |
 |---|---|
-| PR-A | `state.py` (Pydantic 모델), `data/dresscode/static/*.md × 9` (정적 코퍼스) |
-| PR-B | `embedder.py` + `tier1.py` (`tier1_retrieve` / `is_tier1_match` + 인라인 build CLI) + 사전 빌드 FAISS 인덱스 |
-| PR-C | Tier-2 ReAct 도구 (`web_search`, `fetch_page`, `extract_facts`) |
-| PR-D | Tier-2 합의(consensus) + 승격 큐 노드 |
-| PR-E | LangGraph 조립 + `context_subgraph` export → backend selector 연결 |
+| `state.py` | Pydantic 모델 (`ContextState`, `FetchedPage`, `ExtractedFacts`) |
+| `data/dresscode/static/*.md` (9건) | 정적 코퍼스 (event_type 별 드레스코드 YAML + 본문) |
+| `embedder.py` + `tier1.py` | Tier-1 FAISS RAG (`tier1_retrieve`, `is_tier1_match`, 인라인 build CLI) |
+| `data/dresscode/faiss_index/` | 사전 빌드 FAISS 인덱스 (repo 에 커밋) |
+| `tools/{web_search,fetch,youtube,whitelist,budget}.py` | Tier-2 ReAct 도구 (Tavily / httpx / trafilatura / youtube-transcript) + 도메인 화이트리스트 + 비용 카운터 |
+| `nodes/{plan_query,extract_facts,consensus,tier1_retrieve_node,decide_tier,tier2_web_search,tier2_fetch_pages,pack_context,promotion}.py` | LangGraph 노드 + 분기 함수 |
+| `prompts.py` | LLM 시스템/유저 프롬프트 (한국어) |
+| `forbidden_terms.py` | §4.1 금지어 리스트 + NFC 정규화 헬퍼 |
+| `graph.py` | LangGraph sub-graph 조립 (`build_context_graph`) |
+| `adapter.py` | `context_subgraph` 어댑터 (super-graph 연결, 12s + 3s hard timeout) |
+| `latency.py` | Tier-2 latency 상한 + start-marker 헬퍼 |
 
-> **참고**: `__init__.py` 는 PR-A 시점에 의도적으로 비어있다.
-> `context_subgraph` 가 export 되지 않으므로,
-> `api/app/agents_stub/__init__.py` 의 selector 는 PR-E 머지 전까지
-> 기존 stub 으로 폴백한다 (회귀 위험 0).
+`__init__.py` 가 `context_subgraph` 를 lazy export (PEP 562) → backend selector 가 본
+모듈 import 성공 시 stub 대신 실 Context Agent 로 라우팅한다.
 
 ## 설치
 
@@ -36,12 +38,12 @@ Recommendation Agent 가 의류 평가 시 사용한다.
 pip install -r agents/context/requirements.txt
 ```
 
-PR-B 기준 의존성: `python-frontmatter`, `pydantic`, `sentence-transformers`,
-`faiss-cpu`, `langchain-huggingface`, `langchain-community`. PR-C 에서 Tier-2 도구
-관련 (`tavily-python`, `httpx`, `trafilatura` 등) 가 추가될 예정이다.
+의존성: `python-frontmatter`, `pydantic`, `sentence-transformers`, `faiss-cpu`,
+`langchain-huggingface`, `langchain-community`, `google-genai`, `tavily-python`,
+`httpx`, `trafilatura[all]`, `youtube-transcript-api`.
 
 > 프로덕션 배포 시에는 backend 담당자가 동일 의존성을 `api/requirements.txt` 에도
-> 반영해야 한다 (현 PR 범위 밖, PR-E 검토 시점에 합의 예정).
+> 반영해야 한다.
 
 ## 환경 변수
 
@@ -49,7 +51,7 @@ PR-B 기준 의존성: `python-frontmatter`, `pydantic`, `sentence-transformers`
 
 | 키 | 용도 | 비고 |
 |---|---|---|
-| `TAVILY_API_KEY` | Tier-2 web search | PR-C 부터 사용 |
+| `TAVILY_API_KEY` | Tier-2 web search | Tavily 무료 1,000 credit/월 한도 보호 카운터 내장 |
 | `GOOGLE_API_KEY` | Tier-2 extract_facts (LLM structured output) | Vision Agent 가 이미 사용 중인 키 재사용. 루트 `.env.example` 에 정의됨. |
 
 ## 데이터
@@ -57,7 +59,5 @@ PR-B 기준 의존성: `python-frontmatter`, `pydantic`, `sentence-transformers`
 - 정적 RAG 코퍼스: `data/dresscode/static/*.md` (9개 event_type, YAML frontmatter + Korean body).
   - vocab 은 `agents/vision/tools/color_lookup.py` 의 `_COLOR_TABLE` 기준.
   - schema 는 `data/dresscode/static/README.md` 참조.
-- 사전 빌드 FAISS 인덱스: `data/dresscode/faiss_index/` (PR-B 부터 repo 에 커밋)
-- 인덱스 재빌드: `python -m agents.context.tier1 build` (인라인 CLI, `_build_index` 호출)
-
-> FAISS 인덱스 빌드/로드 코드는 PR-B (`tier1.py`) 에서 추가됨.
+- 사전 빌드 FAISS 인덱스: `data/dresscode/faiss_index/`
+- 인덱스 재빌드: `python -m agents.context.tier1 build`
