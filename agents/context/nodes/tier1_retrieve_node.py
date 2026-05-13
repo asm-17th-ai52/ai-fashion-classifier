@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from api.app.schemas.context import (
+from app.schemas.context import (
     ColorGuidance,
     DressCode,
     ExpectedCategories,
 )
-from api.app.schemas.enums import DressCodeTier
+from app.schemas.enums import DressCodeTier
 
 from agents.context.state import ContextState
 from agents.context.tier1 import tier1_retrieve

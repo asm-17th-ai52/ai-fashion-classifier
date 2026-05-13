@@ -32,8 +32,8 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 # 외부에 노출되는 응답 schema는 backend에 이미 정의되어 있다.
 # 본 Agent는 동일 schema 인스턴스를 다시 정의하지 않고 그대로 import한다.
 # (07-data-contracts.md §3 단일 출처 유지.)
-from api.app.schemas.context import DressCode, EvidenceQuote
-from api.app.schemas.session import SessionCreateRequest
+from app.schemas.context import DressCode, EvidenceQuote
+from app.schemas.session import SessionCreateRequest
 
 
 class FetchedPage(BaseModel):

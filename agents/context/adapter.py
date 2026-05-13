@@ -24,7 +24,7 @@ import asyncio
 import time
 from typing import Any
 
-from api.app.schemas.context import ContextResponse
+from app.schemas.context import ContextResponse
 
 from agents.context.graph import build_context_graph
 from agents.context.latency import TIER2_TIMEOUT_SECONDS
