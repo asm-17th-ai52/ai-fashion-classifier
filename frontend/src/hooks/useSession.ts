@@ -27,23 +27,28 @@ export function useSession() {
 
     const es = new EventSource(`${BASE_URL}/v1/sessions/${sessionId}/stream`);
     activeEs = es;
+    let terminated = false;
 
     es.onmessage = (e) => {
       const ev = JSON.parse(e.data) as {
         type: "progress" | "done" | "error";
         pct: number;
+        agent_pct: number;
         message: string;
+        agent?: string;
         result?: unknown;
         code?: string;
       };
 
       if (ev.type === "progress") {
-        dispatch({ type: "PROGRESS", pct: ev.pct, message: ev.message });
+        dispatch({ type: "PROGRESS", pct: ev.pct, agentPct: ev.agent_pct ?? ev.pct, message: ev.message, agent: ev.agent ?? "system" });
       } else if (ev.type === "done") {
+        terminated = true;
         es.close();
         activeEs = null;
         dispatch({ type: "SUCCESS", session: ev.result as never });
       } else if (ev.type === "error") {
+        terminated = true;
         es.close();
         activeEs = null;
         dispatch({
@@ -55,6 +60,8 @@ export function useSession() {
     };
 
     es.onerror = () => {
+      // done/error 이벤트로 이미 정상 종료된 경우 무시
+      if (terminated) return;
       es.close();
       activeEs = null;
       // 연결 끊김 — GET /v1/sessions/{id} 폴백

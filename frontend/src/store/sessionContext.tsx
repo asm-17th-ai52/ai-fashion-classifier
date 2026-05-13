@@ -4,13 +4,13 @@ import type { SessionResponse, SimulateResponse } from "@/api/schemas";
 
 export type SessionState =
   | { status: "idle" }
-  | { status: "loading"; isCustomEvent: boolean; progress: number; logs: string[] }
+  | { status: "loading"; isCustomEvent: boolean; progress: number; agentProgress: Record<string, number>; logs: { pct: number; message: string; agent: string }[] }
   | { status: "success"; session: SessionResponse; simulation: SimulateResponse | null }
   | { status: "error"; error: Error; errorCode?: string };
 
 type SessionAction =
   | { type: "SUBMIT"; isCustomEvent: boolean }
-  | { type: "PROGRESS"; pct: number; message: string }
+  | { type: "PROGRESS"; pct: number; agentPct: number; message: string; agent: string }
   | { type: "SUCCESS"; session: SessionResponse }
   | { type: "ERROR"; error: Error; errorCode?: string }
   | { type: "SIMULATE_SUCCESS"; simulation: SimulateResponse | null }
@@ -19,13 +19,17 @@ type SessionAction =
 function reducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
     case "SUBMIT":
-      return { status: "loading", isCustomEvent: action.isCustomEvent, progress: 0, logs: [] };
+      return { status: "loading", isCustomEvent: action.isCustomEvent, progress: 0, agentProgress: {}, logs: [] };
     case "PROGRESS":
       if (state.status !== "loading") return state;
       return {
         ...state,
-        progress: action.pct,
-        logs: [...state.logs, action.message],
+        progress: Math.max(state.progress, action.pct),
+        agentProgress: {
+          ...state.agentProgress,
+          [action.agent]: Math.max(state.agentProgress[action.agent] ?? 0, action.agentPct),
+        },
+        logs: [...state.logs, { pct: action.pct, message: action.message, agent: action.agent }],
       };
     case "SUCCESS":
       return { status: "success", session: action.session, simulation: null };

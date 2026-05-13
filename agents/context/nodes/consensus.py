@@ -14,8 +14,8 @@ Tier-2 ReAct: 다중 소스 합의 (consensus) 노드 (spec §6.6).
   ``extraction_confidence`` 사용 (보수적).
 - ``evidence_quotes`` : 모든 소스의 quote 를 합쳐 그대로 노출.
 
-PR-E ``pack_context`` 에서 ``event_type`` / ``source_doc_ids`` 를 최종 채워 ``DressCode`` 를
-완성한다.
+``event_type`` / ``source_doc_ids`` 는 본 함수에서 비워둔다 — 호출 측 (``pack_context``)
+이 최종 ``DressCode`` 로 완성한다.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from agents.context.state import ContextState, ExtractedFacts
 
 
 def _general_fallback() -> DressCode:
-    """소스 0 개일 때 노출할 보수적 폴백 — PR-E pack_context 가 event_type 을 덮어쓴다."""
+    """소스 0 개일 때 노출할 보수적 폴백. 호출 측이 event_type 을 덮어쓴다."""
     return DressCode(
         event_type="general",
         tier=DressCodeTier.fallback_general,
@@ -101,7 +101,7 @@ def consensus(facts_list: list[ExtractedFacts]) -> tuple[DressCode, list[str]]:
 
     Returns:
         ``(DressCode, warnings)``. ``DressCode.event_type`` / ``source_doc_ids`` 는
-        호출 측 (PR-E pack_context) 가 채운다.
+        호출 측이 채운다.
     """
     n = len(facts_list)
     warnings: list[str] = []
@@ -129,14 +129,14 @@ def consensus(facts_list: list[ExtractedFacts]) -> tuple[DressCode, list[str]]:
     evidence_quotes = [q for f in facts_list for q in f.evidence_quotes]
 
     dress_code = DressCode(
-        event_type="",  # PR-E pack_context 가 final event_type 으로 덮어씀.
+        event_type="",  # 호출 측이 최종 event_type 으로 덮어씀.
         tier=DressCodeTier.tier2_live,
-        # PR-B R3 권고: 이론상 [-1, 1] 점수를 스키마 [0, 1] 로 clamp.
+        # 이론상 [-1, 1] 인 cosine relevance 를 스키마 허용 범위 [0, 1] 로 clamp.
         rag_match_score=max(0.0, min(1.0, float(rag_score))),
         expected_formality_range=formality,
         expected_categories=categories,
         color_guidance=colors,
-        source_doc_ids=[],  # PR-E 에서 search result url 로 채움.
+        source_doc_ids=[],  # 호출 측이 search result URL 로 채움.
         extraction_confidence=max(0.0, min(1.0, float(extraction_conf))),
         evidence_quotes=evidence_quotes,
     )

@@ -18,7 +18,6 @@ export function useSimulation() {
       : [...activeSuggestionIds, suggestionId];
 
     setActiveSuggestionIds(next);
-
     if (next.length === 0) {
       dispatch({ type: "SIMULATE_SUCCESS", simulation: null });
       return;
