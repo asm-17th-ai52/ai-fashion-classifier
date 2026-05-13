@@ -1,5 +1,5 @@
 """
-Tier-1 retrieve LangGraph 노드 — PR-B ``tier1_retrieve`` 의 thin wrapper.
+Tier-1 retrieve LangGraph 노드 — ``agents.context.tier1.tier1_retrieve`` 의 thin wrapper.
 
 retrieve 결과의 top-1 frontmatter metadata 를 정식 ``DressCode`` 로 변환해
 ``tier1_result`` 에 저장 (state schema 는 ``Optional[DressCode]``). 분기는 ``tier1_score``
@@ -31,7 +31,7 @@ def _meta_to_dress_code(metadata: dict[str, Any], score: float) -> DressCode:
     return DressCode(
         event_type=metadata.get("event_type", "general"),
         tier=DressCodeTier.tier1,
-        # PR-B R3: 이론상 [-1, 1] cosine 을 [0, 1] 로 clamp.
+        # 이론상 [-1, 1] 인 cosine relevance 를 스키마 허용 범위 [0, 1] 로 clamp.
         rag_match_score=max(0.0, min(1.0, float(score))),
         expected_formality_range=metadata.get("expected_formality_range", [30, 80]),
         expected_categories=ExpectedCategories(

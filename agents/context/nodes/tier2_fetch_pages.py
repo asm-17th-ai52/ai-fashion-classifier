@@ -1,5 +1,5 @@
 """
-Tier-2 fetch_pages LangGraph 노드 — PR-C ``fetch_page`` 의 multi-URL wrapper.
+Tier-2 fetch_pages LangGraph 노드 — ``tools.fetch.fetch_page`` 의 multi-URL wrapper.
 
 이전 ``tier2_web_search`` 노드가 ``tier2_meta["last_search_results"]`` 에 둔 URL
 리스트를 가져와 각각 fetch. 회당 fetch 5 회 상한 (spec §6.8) + 글로벌 budget 카운터.

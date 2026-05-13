@@ -1,5 +1,5 @@
 """
-Tier-2 web search LangGraph 노드 — PR-C ``web_search`` 의 thin wrapper.
+Tier-2 web search LangGraph 노드 — ``tools.web_search.search`` 의 thin wrapper.
 
 가장 최근 ``state.search_queries_used`` 의 쿼리로 Tavily 검색.
 호당 ``web_search`` 3 회 상한 (spec §6.8) + 글로벌 일일/월간 budget 카운터 갱신.

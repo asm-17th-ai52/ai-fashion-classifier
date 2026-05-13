@@ -1,9 +1,8 @@
 """Context Agent LangGraph 노드 패키지.
 
-PR-D 단계의 LLM 노드 3 개 (plan_query / extract_facts / consensus) +
-PR-E 단계의 wire-up 노드 (tier1_retrieve / tier2_web_search / tier2_fetch_pages /
-tier2_promotion_enqueue / pack_context) + 분기 함수 (decide_dresscode_tier /
-decide_tier2_continue).
+LLM 노드 (plan_query / extract_facts / consensus) + wire-up 노드 (tier1_retrieve /
+tier2_web_search / tier2_fetch_pages / tier2_promotion_enqueue / pack_context) +
+분기 함수 (decide_dresscode_tier / decide_tier2_continue).
 
 각 노드는 ``ContextState`` 를 입력으로 받아 partial state dict 를 반환한다 — 예외 X,
 실패 시 ``warnings`` 만 추가.

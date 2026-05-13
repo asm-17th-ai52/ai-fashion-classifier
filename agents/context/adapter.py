@@ -13,10 +13,9 @@ import 가능한 상태가 곧 **Context Agent 활성화 신호**.
 하드 latency 가드:
 - spec §6.8 의 Tier-2 12 s 상한은 본래 ``decide_tier2_continue`` 내부 ``latency_exceeded``
   가 책임지지만, LangGraph 1.x 의 Pydantic ``dict`` 필드 머지 의미가 reducer 없이
-  reliable 하지 못해 실측에서 5 iter (~100 s) 까지 통과한 사례가 있음.
-- 본 어댑터는 ``asyncio.wait_for`` 로 **orchestration-level hard timeout** 을 걸어
-  sub-graph 가 멈추지 않더라도 12s + 1s margin 안에 cancel + fallback 응답 반환.
-- 내부 latency 가드는 PR-E 후속 정리에서 root cause 수정.
+  reliable 하지 못한 케이스가 있어 외부 hard cap 을 별도로 둔다.
+- 본 어댑터는 ``asyncio.wait_for`` 로 orchestration-level hard timeout 을 걸어
+  sub-graph 가 멈추지 않더라도 12s + 3s margin 안에 cancel + fallback 응답 반환.
 """
 from __future__ import annotations
 
