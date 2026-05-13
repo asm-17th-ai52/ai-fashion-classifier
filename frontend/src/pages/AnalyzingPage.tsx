@@ -48,9 +48,17 @@ export default function AnalyzingPage() {
     if (state.status === "success") navigate("/result", { replace: true });
   }, [state.status, navigate]);
 
-  const progress = state.status === "loading" ? state.progress : 0;
-  const logs     = state.status === "loading" ? state.logs : [];
-  const overtime = progress > 0 && progress < 100 && logs.length > 12;
+  const agentProgress = state.status === "loading" ? state.agentProgress : {};
+  const logs          = state.status === "loading" ? state.logs : [];
+
+  const STAGE_AGENT: Record<string, string> = {
+    vision: "vision", context: "context", rec: "recommendation", narrator: "recommendation",
+  };
+
+  const totalProgress = Math.round(
+    STAGES.reduce((sum, st) => sum + (agentProgress[STAGE_AGENT[st.id]] ?? 0), 0) / STAGES.length
+  );
+  const overtime = totalProgress > 0 && totalProgress < 100 && logs.length > 12;
 
   /* ── Error ── */
   if (state.status === "error") {
@@ -106,17 +114,17 @@ export default function AnalyzingPage() {
                 pipeline: vision → context → recommendation → narrator
               </div>
             </div>
-            <Pill tone="blue">{progress}%</Pill>
+            <Pill tone="blue">{totalProgress}%</Pill>
           </div>
 
           {/* 4-agent card grid */}
           <div className="bg-panel border border-hairline rounded-xl p-4 mb-4 animate-fade-in">
             <div className="grid grid-cols-4 gap-3">
               {STAGES.map((st) => {
-                const sp     = Math.max(0, Math.min(1, (progress - st.start) / (st.end - st.start)));
-                const pct    = Math.round(sp * 100);
-                const done   = progress >= st.end;
-                const active = progress >= st.start && !done;
+                const agentPct = agentProgress[STAGE_AGENT[st.id]] ?? 0;
+                const pct      = agentPct;
+                const done     = agentPct >= 100;
+                const active   = agentPct > 0 && !done;
                 const color  = done ? "#6ee7a7" : active ? "#5fb8ff" : "#525766";
                 return (
                   <div
@@ -151,12 +159,12 @@ export default function AnalyzingPage() {
               })}
             </div>
 
-            {/* Overall progress bar */}
+            {/* Overall totalProgress bar */}
             <div className="mt-4 h-[3px] rounded-full bg-canvas overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${progress}%`,
+                  width: `${totalProgress}%`,
                   background: "linear-gradient(to right, #5fb8ff, #6ee7a7)",
                   boxShadow: "0 0 8px rgba(95,184,255,0.4)",
                 }}
@@ -185,14 +193,16 @@ export default function AnalyzingPage() {
                 className="absolute top-0 left-0 right-0 h-8 pointer-events-none z-10"
                 style={{ background: "linear-gradient(to bottom, #06070a, transparent)" }}
               />
-              {logs.slice(-14).map((msg, i) => {
-                // 어느 에이전트 구간인지 추론 (시각 전용)
-                const logPct = progress;
-                const stage = STAGES.find(
-                  (s) => logPct >= s.start && logPct < s.end
-                ) ?? STAGES[STAGES.length - 1];
-                const color = AGENT_COLORS[stage.id] ?? "#7c818f";
-                const agentLabel = AGENT_LABELS[stage.id] ?? "SYSTEM";
+              {logs.slice(-14).map((log, i) => {
+                const agentToStageId: Record<string, string> = {
+                  vision: "vision", context: "context",
+                  recommendation: "rec", system: "narrator",
+                };
+                const stageId = agentToStageId[log.agent] ?? (
+                  STAGES.find((s) => log.pct >= s.start && log.pct < s.end)?.id ?? "narrator"
+                );
+                const color = AGENT_COLORS[stageId] ?? "#7c818f";
+                const agentLabel = AGENT_LABELS[stageId] ?? "SYSTEM";
                 return (
                   <div key={i} className="flex gap-3">
                     <span
@@ -201,7 +211,7 @@ export default function AnalyzingPage() {
                     >
                       [{agentLabel.padEnd(8)}]
                     </span>
-                    <span className="text-body">{msg}</span>
+                    <span className="text-body">{log.message}</span>
                   </div>
                 );
               })}
