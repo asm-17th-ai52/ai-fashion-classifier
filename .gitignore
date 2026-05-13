@@ -27,3 +27,6 @@ frontend/vite.config.d.ts
 .coverage
 htmlcov/
 *.log
+
+# Context Agent Tier-2 비용 카운터 (runtime 데이터, 절대 commit 금지)
+agents/context/data/tier2_budget.json

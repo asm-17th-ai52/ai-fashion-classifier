@@ -10,8 +10,11 @@ fetch_page 호출 전 검증 두 곳에서 사용된다.
   ``bar.tistory.com`` 모두 허용.
 - ``blog.naver.com`` 은 **정확 매칭**: 네이버는 매거진 카테고리만 허용 정책이므로
   서브도메인 확장이 의미 없음 (다른 서브도메인 매칭은 별도 검토).
-- 블록 패턴 (``*.adult.*``, ``*shopping*``) 은 hostname + 전체 URL 두 곳에서
-  ``fnmatch`` 적용 — 광고/쇼핑 URL 이 쿼리스트링에 숨어 들어와도 차단.
+- ``youtu.be`` 는 ``youtube.com`` 의 short-URL 별칭으로 같이 허용 (자막 추출 도구가
+  short-URL 도 video_id 로 정규화하므로 fetch 측 정합).
+- 블록 패턴 (``*.adult.*``, ``*shopping*``) 은 **hostname 에만** ``fnmatch`` 적용.
+  full URL fnmatch 는 ``tistory.com/post-about-online-shopping`` 같은 정상 글까지
+  over-block 하는 부작용이 있어 hostname 으로 한정.
 """
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ _SUFFIX_DOMAINS: tuple[str, ...] = (
     "saramin.co.kr",
     "linkedin.com",
     "youtube.com",
+    "youtu.be",  # YouTube short-URL 별칭.
 )
 
 # Exact-match: 서브도메인 확장 막음 (정책상 매거진 카테고리 path 만 허용).
@@ -56,9 +60,9 @@ def url_allowed(url: str) -> bool:
     if not host:
         return False
 
-    # Block 패턴: hostname + 전체 URL 두 곳 모두 검사.
+    # Block 패턴: hostname 만 검사 (URL path 의 “shopping” 단어 over-block 방지).
     for pattern in _BLOCK_PATTERNS:
-        if fnmatch.fnmatch(host, pattern) or fnmatch.fnmatch(url.lower(), pattern):
+        if fnmatch.fnmatchcase(host, pattern):
             return False
 
     # Exact 매칭 우선 (blog.naver.com 등).

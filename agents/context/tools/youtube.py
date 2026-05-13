@@ -19,9 +19,18 @@ try:
         TranscriptsDisabled,
         VideoUnavailable,
     )
+    # IP/요청 차단 — 1.x 부터 도입. 구버전에서는 import 실패해서 fallback.
+    try:
+        from youtube_transcript_api._errors import (  # type: ignore[import-untyped]
+            IpBlocked,
+            RequestBlocked,
+        )
+    except ImportError:  # pragma: no cover - 구버전 youtube_transcript_api
+        IpBlocked = RequestBlocked = Exception  # type: ignore[assignment, misc]
 except ImportError:  # pragma: no cover - import-time guard
     YouTubeTranscriptApi = None  # type: ignore[assignment, misc]
     NoTranscriptFound = TranscriptsDisabled = VideoUnavailable = Exception  # type: ignore[assignment, misc]
+    IpBlocked = RequestBlocked = Exception  # type: ignore[assignment, misc]
 
 
 # `/shorts/<id>` 또는 `/embed/<id>` 패스에서 video_id 추출용.
@@ -78,6 +87,10 @@ def fetch_transcript(url: str) -> tuple[Optional[str], Optional[str]]:
         api = YouTubeTranscriptApi()
         # ko 자막 우선, 없으면 en (auto-generated 포함).
         transcript = api.fetch(vid, languages=["ko", "en"])
+    except (RequestBlocked, IpBlocked) as exc:
+        # YouTube 가 본 IP 를 차단했거나 요청 빈도 제한에 걸린 경우 — 별도 시그널
+        # 로 분리해 호출 측이 즉시 Tier-2 fallback 으로 회피하기 쉽게 한다.
+        return None, f"youtube_ip_blocked: {type(exc).__name__}"
     except (NoTranscriptFound, TranscriptsDisabled, VideoUnavailable) as exc:
         return None, f"youtube_transcript_unavailable: {type(exc).__name__}"
     except Exception as exc:  # noqa: BLE001 — 네트워크/SDK 변경 등 방어적 catch

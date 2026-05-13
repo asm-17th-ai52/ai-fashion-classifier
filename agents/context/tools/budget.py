@@ -11,9 +11,10 @@ Tier-2 비용/속도 카운터 (스펙 §6.8).
 제어이지 정합성 요구 사항이 아니므로 OK.
 
 상한:
-- ``web_search`` 호출: spec §6.8 에 "1 요청당 최대 3회" — 본 모듈은 글로벌 일일 한도
-  위주 관리. 요청 단위 카운터는 LangGraph state 가 다룸.
-- 본 모듈의 일일 글로벌 상한 = web_search + fetch_page + react_step 의 합.
+- ``web_search`` 호출: spec §6.8 에 "1 요청당 최대 3회" — 본 모듈은 글로벌 일일/월간
+  한도 위주 관리. 요청 단위 카운터는 LangGraph state 가 다룸.
+- 일일 글로벌 상한 = web_search + fetch_page + react_step 의 합.
+- 월간 글로벌 상한: Tavily 무료 티어 1,000 credit/월 보호용 (이번 달 누적 합계).
 """
 from __future__ import annotations
 
@@ -31,6 +32,10 @@ _BUDGET_PATH = Path(__file__).resolve().parents[1] / "data" / "tier2_budget.json
 # spec §6.8: 일일 Tier-2 호출 글로벌 상한 200 회.
 DAILY_LIMIT: int = 200
 
+# Tavily 무료 티어 1,000 credit/월. 900 으로 두면 100 여유 — 일일 한도 매일 풀로 써도
+# 30 일 × 200 = 6,000 까지 갈 수 있어 월간 한도가 실효적 brake.
+MONTHLY_LIMIT: int = 900
+
 _VALID_KINDS: frozenset[str] = frozenset(
     {"web_search_calls", "fetch_calls", "total_react_steps"}
 )
@@ -39,6 +44,11 @@ _VALID_KINDS: frozenset[str] = frozenset(
 def _today() -> str:
     """UTC 기준 ISO 일자 (YYYY-MM-DD)."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _month_prefix() -> str:
+    """UTC 기준 ISO 월 prefix (YYYY-MM)."""
+    return datetime.now(timezone.utc).strftime("%Y-%m")
 
 
 def _load() -> dict:
@@ -74,14 +84,33 @@ def _total_today(data: dict) -> int:
     return sum(int(v) for v in today_data.values() if isinstance(v, (int, float)))
 
 
+def _total_month(data: dict) -> int:
+    """이번 달 (UTC) 의 모든 일자 키 카운터 합계."""
+    prefix = _month_prefix()
+    total = 0
+    for day_key, day_data in data.items():
+        if not isinstance(day_data, dict) or not day_key.startswith(prefix):
+            continue
+        total += sum(
+            int(v) for v in day_data.values() if isinstance(v, (int, float))
+        )
+    return total
+
+
 def check_budget() -> tuple[bool, Optional[str]]:
-    """오늘 호출이 글로벌 상한 미만이면 ``(True, None)``, 도달 시 ``(False, warning)``."""
+    """일일 + 월간 상한 모두 미달 시 ``(True, None)``, 한쪽이라도 초과 시 ``(False, warning)``."""
     data = _load()
-    used = _total_today(data)
-    if used >= DAILY_LIMIT:
+    today_used = _total_today(data)
+    if today_used >= DAILY_LIMIT:
         return False, (
-            f"tier2_budget_exceeded: {used}/{DAILY_LIMIT} calls used today "
+            f"tier2_budget_exceeded: {today_used}/{DAILY_LIMIT} calls used today "
             f"({_today()} UTC). Falling back to 'general' dress code."
+        )
+    month_used = _total_month(data)
+    if month_used >= MONTHLY_LIMIT:
+        return False, (
+            f"tier2_monthly_exceeded: {month_used}/{MONTHLY_LIMIT} calls used this month "
+            f"({_month_prefix()} UTC). Falling back to 'general' dress code."
         )
     return True, None
 

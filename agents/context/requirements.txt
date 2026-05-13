@@ -29,5 +29,8 @@ numpy<2
 tavily-python>=0.5.0
 httpx>=0.27
 trafilatura[all]>=2.0
-youtube-transcript-api>=1.0
-tenacity>=8.2
+# youtube-transcript-api 는 YouTube 스크래핑에 의존하므로 minor 업데이트로도 깨질
+# 위험. upper bound 를 명시해 unexpected 업그레이드 방지.
+youtube-transcript-api>=1.0,<2
+# tenacity 는 PR-D 의 ReAct 루프 retry 정책에서 사용 예정. PR-C 자체에선 미사용이라
+# 활성 의존성에서 일단 제외 (필요 시 PR-D 가 본 파일에 추가).
