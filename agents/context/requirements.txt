@@ -2,6 +2,7 @@
 #
 # PR-A: python-frontmatter / pydantic (모델 + 정적 코퍼스)
 # PR-B: sentence-transformers / faiss-cpu / langchain-huggingface / langchain-community (Tier-1 FAISS RAG)
+# PR-D: google-genai (Tier-2 ReAct LLM 노드 — plan_query / extract_facts). Vision Agent 가 이미 사용 중인 키 (GOOGLE_API_KEY) 재사용.
 # PR-C 예정: tavily-python / httpx / trafilatura 등 (Tier-2 ReAct 도구)
 #
 # 본 파일은 Context Agent 단독 개발/테스트용이며, 프로덕션 배포 시에는
@@ -9,6 +10,9 @@
 
 python-frontmatter>=1.0
 pydantic>=2.0
+
+# Tier-2 ReAct LLM 노드 (PR-D). Vision Agent 가 이미 동일 키 사용 중.
+google-genai>=1.0
 
 # Tier-1 정적 RAG (PR-B).
 #
