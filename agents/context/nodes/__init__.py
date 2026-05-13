@@ -1,6 +1,5 @@
 """Context Agent Tier-2 ReAct 노드 패키지.
 
-PR-D 는 LangGraph 그래프 조립 (PR-E) 와 분리해서 **노드 함수만** 제공한다.
 각 노드는 ``ContextState`` 를 입력으로 받아 partial state dict 를 반환한다 — 예외 X,
 실패 시 ``warnings`` 만 추가.
 

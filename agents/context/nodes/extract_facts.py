@@ -26,10 +26,10 @@ from agents.vision.nodes.step1_nodes import GEMINI_MODEL, _build_client
 
 
 # ---------------------------------------------------------------------------
-# Gemini-호환 sibling schema for ExtractedFacts (PR-A 의 정식 schema 는 ``extra="forbid"``
-# 가 설정돼 있어 ``additionalProperties: false`` 를 생성 → google-genai SDK 가
-# INVALID_ARGUMENT 로 거절. 본 sibling 은 LLM 입력용으로만 사용하고, validate 후
-# PR-A 의 정식 ``ExtractedFacts`` 로 재구성한다 (validator 가 그대로 실행됨).
+# Gemini-호환 sibling schema for ExtractedFacts: ``state.ExtractedFacts`` 는
+# ``ConfigDict(extra="forbid")`` 가 설정돼 있어 ``additionalProperties: false`` 를
+# 생성 → google-genai SDK 가 INVALID_ARGUMENT 로 거절한다. 본 sibling 은 LLM 응답
+# 수신용으로만 사용하고 validate 후 정식 ``ExtractedFacts`` 로 재구성한다 (validator 재실행).
 # ---------------------------------------------------------------------------
 
 
@@ -47,11 +47,10 @@ class _ColorGuidanceLLM(BaseModel):
 
 class _EvidenceQuoteLLM(BaseModel):
     url: str
-    # PR-A 정식 ``EvidenceQuote.quote`` 는 ``max_length=500``. LLM 이 가끔 초과
-    # 출력하면 ValidationError 로 사일런트 폐기되는 문제 회피 위해 sibling 은 더 넉넉히
-    # 받고 ``_llm_to_facts`` 단계에서 트림한다.
+    # 정식 ``EvidenceQuote.quote`` 는 ``max_length=500``. LLM 이 가끔 초과 출력해도
+    # 사일런트 폐기되지 않도록 sibling 은 더 넉넉히 받고 ``_llm_to_facts`` 에서 트림.
     quote: str = Field(..., max_length=2000)
-    fetched_at: str  # ISO datetime — ExtractedFacts 재구성 시 datetime 으로 파싱.
+    fetched_at: str  # ISO datetime — 재구성 시 datetime 으로 파싱.
 
 
 class _ExtractedFactsLLM(BaseModel):
@@ -75,11 +74,11 @@ if _SIBLING_FIELDS != _CANONICAL_FIELDS:  # pragma: no cover - 빌드 단계 가
     )
 
 
-# extract_facts 가 LLM 에 전달하는 본문 최대 길이. PR-C `fetch.py` 의 ``MAX_BODY_BYTES``
-# 와 동일 보호 라인 — fetch 단계에서 50KB 트림됐어도 한 번 더 안전망.
+# LLM 입력 본문 최대 길이. fetch 단계 (``tools/fetch.py``) 의 ``MAX_BODY_BYTES`` 와
+# 동일 보호 라인 — fetch 가 트림했어도 한 번 더 안전망.
 _MAX_BODY_CHARS = 50_000
 
-# PR-A 의 정식 EvidenceQuote.quote 길이 상한 (재구성 시 트림 기준).
+# 정식 ``EvidenceQuote.quote`` 길이 상한 (재구성 시 트림 기준).
 _QUOTE_MAX_CHARS = 500
 
 
@@ -118,11 +117,9 @@ def _facts_contain_forbidden(facts: _ExtractedFactsLLM) -> tuple[bool, Optional[
 
 
 def _llm_to_facts(llm: _ExtractedFactsLLM) -> ExtractedFacts:
-    """LLM sibling → PR-A 의 정식 ``ExtractedFacts`` 재구성 (validator 재실행).
+    """LLM sibling → 정식 ``ExtractedFacts`` 재구성 (validator 재실행).
 
-    PR-A ``EvidenceQuote.quote`` 의 ``max_length=500`` 위반 회피를 위해 인용은 500자로
-    트림. trim 사실은 호출 측 warning 으로 별도 알린다 (본 함수는 ``ExtractedFacts``
-    인스턴스만 반환).
+    ``EvidenceQuote.quote`` 의 ``max_length=500`` 위반 회피를 위해 인용을 500자로 트림.
     """
     quotes_payload = []
     for q in llm.evidence_quotes:
@@ -219,7 +216,7 @@ def node_tier2_extract_facts(state: ContextState) -> dict:
         try:
             new_facts.append(_llm_to_facts(sibling))
         except ValidationError as exc:
-            # PR-A validator (range/length 등) 위반 — sibling 통과했어도 정식 schema 실패.
+            # 정식 schema 의 range/length validator 위반 (sibling 은 통과한 경우).
             warnings.append(f"extract_facts_canonical_validate: {str(exc)[:200]}")
 
     return {

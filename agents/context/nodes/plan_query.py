@@ -74,8 +74,7 @@ def node_tier2_plan_query(state: ContextState) -> dict:
     try:
         client = _build_client()
     except EnvironmentError as exc:
-        # API 키 미설정은 본 노드에서 fail-soft — Tier-2 전체가 abort 됐어야 하지만
-        # 그래프 조립 (PR-E) 단계의 책임. 본 노드는 warning + step 만 증가.
+        # API 키 미설정은 fail-soft — warning + step 만 증가하고 routing 은 그래프가 결정.
         warnings.append(f"plan_query_no_api_key: {exc}")
         return {
             "react_step": next_step,

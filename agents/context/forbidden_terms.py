@@ -39,7 +39,7 @@ def normalize_for_filter(text: str) -> str:
 
 
 # spec §08 §4.1 의 Context 특화 추가 단어 — narrator 기본 리스트에 빠진 항목.
-# 단어 선정은 false-positive 와 안전망 폭의 균형 (lead 의 PR-D 회송 가이드 그대로).
+# 단어 선정은 false-positive 와 안전망 폭의 균형 (N-gram 위주, 단독 광범위 토큰 제외).
 _CONTEXT_ONLY: tuple[str, ...] = (
     "잘생",
     "잘생긴",
