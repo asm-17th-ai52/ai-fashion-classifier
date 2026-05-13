@@ -19,7 +19,23 @@ False-positive 회피 트레이드오프:
 """
 from __future__ import annotations
 
+import re
+import unicodedata
+
 from agents.recommendation.narrator import FORBIDDEN_TERMS
+
+
+def normalize_for_filter(text: str) -> str:
+    """NFC + whitespace 제거 + 소문자. forbidden 매칭 우회 차단.
+
+    LLM 이 "체-형", "체 형", "마른\\xa0체" (NBSP), NFD 자모 분리 형태 등으로
+    토큰을 분해해서 substring 매칭을 우회하는 시나리오를 막는다. 매칭 양쪽
+    (텍스트와 금지어) 에 동일 정규화 적용.
+    """
+    if not text:
+        return ""
+    nfc = unicodedata.normalize("NFC", text)
+    return re.sub(r"\s+", "", nfc).lower()
 
 
 # spec §08 §4.1 의 Context 특화 추가 단어 — narrator 기본 리스트에 빠진 항목.
