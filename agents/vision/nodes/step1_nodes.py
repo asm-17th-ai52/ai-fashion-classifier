@@ -12,6 +12,7 @@ Step 1 노드: VLM 1차 추출 및 색상 덮어쓰기.
 import os
 import time
 import base64
+import structlog
 from typing import Literal
 from PIL import Image
 import io
@@ -62,6 +63,8 @@ class _VLMExtractionOutput(BaseModel):
 
 
 GEMINI_MODEL = "gemini-3.1-flash-lite"
+
+log = structlog.get_logger("vision.step1")
 
 
 def _build_client() -> genai.Client:
@@ -120,6 +123,7 @@ def node_vlm_extract_all(state: VisionState) -> dict:
     )
 
     # VLM 호출 (실패 시 1회 재시도)
+    log.info("vision_vlm_start", step=state.steps_taken + 1)
     start = time.time()
     result: _VLMExtractionOutput | None = None
     error: str | None = None
@@ -138,6 +142,7 @@ def node_vlm_extract_all(state: VisionState) -> dict:
     elapsed_ms = int((time.time() - start) * 1000)
 
     if error or result is None:
+        log.warning("vision_vlm_done", step=state.steps_taken + 1, success=False, latency_ms=elapsed_ms, error=error)
         return {
             "error": error or "VLM이 결과를 반환하지 않았습니다.",
             "tool_call_log": state.tool_call_log + [
@@ -166,6 +171,8 @@ def node_vlm_extract_all(state: VisionState) -> dict:
 
     # TODO: confidence 평균이 0.6 미만이면 warnings에 "low_avg_confidence" 추가 (spec §9)
     # TODO: schema 위반 시 Critic 없이 자동 재추출 트리거 (spec §10)
+
+    log.info("vision_vlm_done", step=state.steps_taken + 1, success=True, slots_extracted=len(garments), latency_ms=elapsed_ms)
 
     return {
         "garments": garments,
@@ -237,6 +244,9 @@ def node_overwrite_colors(state: VisionState) -> dict:
             "rgb": list(rgb_tuple),
             "name": color_name,
         })
+
+    occluded_slots = [e["slot"] for e in log_entries if e.get("source") == "vlm_hint"]
+    log.info("vision_color_done", slots_updated=len(updated_garments), occluded_slots=occluded_slots)
 
     return {
         "garments": updated_garments,

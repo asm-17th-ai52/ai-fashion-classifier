@@ -13,9 +13,12 @@ Verifier 목록:
                                (위반 시 violations가 아닌 warnings에 추가)
 """
 from collections import Counter
+import structlog
 
 from ..state import VisionState, Violation
 from ..tools.color_lookup import rgb_to_korean_name
+
+log = structlog.get_logger("vision.step2")
 
 
 # ──────────────────────────────────────────────
@@ -247,6 +250,18 @@ def node_run_verifiers(state: VisionState) -> dict:
         "passed": len(slot_warnings) == 0,
         "warnings": slot_warnings,
     })
+
+    if all_violations:
+        log.warning(
+            "vision_verify_done",
+            passed=False,
+            violation_count=len(all_violations),
+            violation_types=list({v.type for v in all_violations}),
+            violation_slots=list({v.slot for v in all_violations}),
+            warning_count=len(new_warnings),
+        )
+    else:
+        log.info("vision_verify_done", passed=True, violation_count=0, warning_count=len(new_warnings))
 
     return {
         "violations": all_violations,

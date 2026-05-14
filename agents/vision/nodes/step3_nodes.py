@@ -12,6 +12,7 @@ node_vlm_extract_targeted 완료 후에는 overwrite_colors → run_verifiers로
 import base64
 import json
 import time
+import structlog
 from pydantic import BaseModel
 
 from google.genai import types
@@ -30,6 +31,9 @@ from .step1_nodes import (
 # ──────────────────────────────────────────────
 # Critic LLM 응답 스키마
 # ──────────────────────────────────────────────
+
+log = structlog.get_logger("vision.step3")
+
 
 class _ReextractPlanOutput(BaseModel):
     """Critic LLM이 반환하는 재추출 계획."""
@@ -86,6 +90,7 @@ def node_critic_llm(state: VisionState) -> dict:
     elapsed_ms = int((time.time() - start) * 1000)
 
     if error or plan is None:
+        log.warning("vision_critic_done", success=False, latency_ms=elapsed_ms, error=error)
         return {
             "give_up": True,
             "warnings": state.warnings + ["critic_failed"],
@@ -104,6 +109,9 @@ def node_critic_llm(state: VisionState) -> dict:
     new_warnings = list(state.warnings)
     if plan.give_up:
         new_warnings.append("critic_give_up")
+        log.warning("vision_critic_done", success=True, give_up=True, latency_ms=elapsed_ms)
+    else:
+        log.info("vision_critic_done", success=True, give_up=False, reextract_slots=plan.slots, reason=plan.reason, latency_ms=elapsed_ms)
 
     return {
         "reextract_plan": reextract_plan,
@@ -215,6 +223,10 @@ def node_vlm_extract_targeted(state: VisionState) -> dict:
 
     # 원본 순서를 유지하면서 garments를 재조립합니다.
     updated_garments = [garment_map[g.slot] for g in state.garments]
+
+    success_slots = [e["slot"] for e in log_entries if e.get("success")]
+    failed_slots = [e["slot"] for e in log_entries if not e.get("success")]
+    log.info("vision_reextract_done", success_slots=success_slots, failed_slots=failed_slots, vlm_calls=vlm_calls_delta)
 
     return {
         "garments": updated_garments,
