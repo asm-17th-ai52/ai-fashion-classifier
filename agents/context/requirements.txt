@@ -5,6 +5,7 @@
 
 python-frontmatter>=1.0
 pydantic>=2.0
+structlog>=24.1.0
 
 # Tier-2 ReAct LLM 노드 (Gemini structured output). Vision Agent 가 이미 동일 키 사용.
 google-genai>=1.0
